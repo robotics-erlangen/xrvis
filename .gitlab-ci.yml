@@ -1,0 +1,20 @@
+stages:
+  - build
+
+linux-x64-release:
+  stage: build
+  image: xrvis-ci:1.85
+  script:
+    - mold -run cargo build --release
+  artifacts:
+    paths:
+      - target/release/xrvis
+
+windows-x64-release:
+  stage: build
+  image: xrvis-ci:1.85
+  script:
+    - mold -run cargo build --release --target x86_64-pc-windows-gnu
+  artifacts:
+    paths:
+      - target/x86_64-pc-windows-gnu/release/xrvis.exe
