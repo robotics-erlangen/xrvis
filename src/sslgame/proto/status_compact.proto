@@ -1,0 +1,107 @@
+syntax = "proto2";
+
+package amun_compact;
+
+message Status {
+    optional uint64 timestamp = 1;
+    optional TeamInfo yellow_team = 2;
+    optional TeamInfo blue_team = 3;
+    optional FieldGeometry field_geometry = 4;
+    optional WorldState world_state = 5;
+    repeated Visualization visualization = 6;
+    optional VisualizationGroup visualization_group = 7;
+}
+
+message TeamInfo {
+    required string name = 1;
+}
+
+message FieldGeometry {
+    required float field_width = 1;
+    required float field_height = 2;
+    optional float boundary_width = 3;
+    required float defense_width = 4;
+    required float defense_height = 5;
+    required float goal_width = 6;
+}
+
+// ==== World State ====
+
+message WorldState {
+    optional Ball ball = 1;
+    repeated Robot yellow_robot = 2;
+    repeated Robot blue_robot = 3;
+}
+
+message Robot {
+    required uint32 id = 1;
+    required float p_x = 2;
+    required float p_y = 3;
+    required float phi = 4;
+}
+
+message Ball {
+    required float p_x = 1;
+    required float p_y = 2;
+    optional float p_z = 3;
+}
+
+// ==== Visualizations ====
+
+message VisualizationGroup {
+    required uint32 group = 1;
+    required uint32 group_count = 2;
+}
+
+message Visualization {
+    required string name = 1;
+    repeated VisPart part = 2;
+}
+
+message VisPart {
+    optional BorderStyle border_style = 1;
+    optional Color fill_color = 2;
+    oneof geom {
+        Circle circle = 3;
+        Polygon polygon = 4;
+        Path path = 5;
+    }
+}
+
+message BorderStyle {
+    enum Style {
+        DashLine = 1;
+        DotLine = 2;
+        DashDotLine = 3;
+        DashDotDotLine = 4;
+    }
+
+    optional Style style = 1;
+    optional Color color = 2;
+}
+
+message Color {
+    required uint32 red = 1 [default = 0];
+    required uint32 green = 2 [default = 0];
+    required uint32 blue = 3 [default = 0];
+    required uint32 alpha = 4 [default = 255];
+}
+
+message Circle {
+    required float p_x = 1;
+    required float p_y = 2;
+    required float radius = 3;
+}
+
+message Point {
+    required float x = 1;
+    required float y = 2;
+}
+
+message Polygon {
+    repeated Point point = 1;
+}
+
+message Path {
+    repeated Point point = 1;
+}
