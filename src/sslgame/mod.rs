@@ -3,20 +3,24 @@ pub mod proto {
         include!(concat!(env!("OUT_DIR"), "/amun_compact.rs"));
     }
 }
+mod depth_mask_material;
 mod mesh_generators;
 mod state_filter;
 mod state_receiver;
 
+use crate::sslgame::depth_mask_material::DepthMaskMaterial;
 use crate::sslgame::mesh_generators::*;
 use crate::sslgame::proto::amun_compact;
 use crate::sslgame::proto::amun_compact::vis_part::Geom;
 use crate::sslgame::state_filter::StateFilter;
 use crate::sslgame::state_receiver::{StatusUpdateReceiver, manage_rx_task};
 use bevy::prelude::*;
+use bevy::render::mesh::{CylinderAnchor, CylinderMeshBuilder};
 use bevy::utils::HashMap;
 use std::cmp::PartialEq;
 
 pub fn ssl_game_plugin(app: &mut App) {
+    // Entities
     app.world_mut().spawn((
         Field {
             game_state: None,
@@ -25,10 +29,35 @@ pub fn ssl_game_plugin(app: &mut App) {
         StateFilter::default(),
     ));
 
+    // Resources
+    app.insert_resource(RenderSettings {
+        field: true,
+        robots: RobotRenderSettings::Fallback,
+        ball: true,
+        visualizations: true,
+    });
+
+    // Depth mask setup
+    app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
+
+    let robot_mask_mesh =
+        app.world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(bevy::render::mesh::MeshBuilder::build(
+                &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
+            ));
+    let robot_mask_material = app
+        .world_mut()
+        .resource_mut::<Assets<DepthMaskMaterial>>()
+        .add(DepthMaskMaterial {});
+    app.insert_resource(RobotMaskMeshHandles(robot_mask_mesh, robot_mask_material));
+
+    // Systems
     app.add_systems(
         Update,
         (
             receive_update_events,
+            handle_render_settings_change,
             (
                 update_game_state,
                 update_field_geometry,
@@ -42,15 +71,74 @@ pub fn ssl_game_plugin(app: &mut App) {
     app.add_systems(Update, manage_rx_task);
 }
 
+// ======== Resources ========
+
+#[derive(Clone, Debug, Default)]
+pub enum RobotRenderSettings {
+    #[default]
+    Detailed,
+    Fallback,
+    Cutout,
+    None,
+}
+
+#[derive(Resource, Debug)]
+pub struct RenderSettings {
+    pub field: bool,
+    pub robots: RobotRenderSettings,
+    pub ball: bool,
+    pub visualizations: bool,
+}
+
+impl RenderSettings {
+    pub fn full() -> Self {
+        RenderSettings {
+            field: true,
+            robots: RobotRenderSettings::Detailed,
+            ball: true,
+            visualizations: true,
+        }
+    }
+    pub fn ar() -> Self {
+        RenderSettings {
+            field: false,
+            robots: RobotRenderSettings::Cutout,
+            ball: false,
+            visualizations: true,
+        }
+    }
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            field: true,
+            robots: RobotRenderSettings::default(),
+            ball: true,
+            visualizations: true,
+        }
+    }
+}
+
+#[derive(Resource, Debug)]
+struct RobotMaskMeshHandles(Handle<Mesh>, Handle<DepthMaskMaterial>);
+
 // ======== Field components ========
 
-#[derive(Component, Default)]
+#[derive(Component, Debug, Default, Clone)]
+#[require(Transform, Visibility)]
+pub struct Field {
+    pub game_state: Option<GameInfo>,
+    pub geometry: FieldGeometry,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct GameInfo {
     yellow_team: String,
     blue_team: String,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldGeometry {
     play_area_size: Vec2,
     boundary_width: f32,
@@ -84,31 +172,24 @@ impl Default for FieldGeometry {
     }
 }
 
-#[derive(Component, Default)]
-#[require(Transform, Visibility)]
-pub struct Field {
-    pub game_state: Option<GameInfo>,
-    pub geometry: FieldGeometry,
-}
-
 // ======== Field content components =========
 
-#[derive(Component, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Team {
     #[default]
     Yellow,
     Blue,
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Debug, Clone, Copy)]
 #[require(Team, Transform)]
 pub struct Robot(u8);
 
-#[derive(Component, Default)]
+#[derive(Component, Debug)]
 #[require(Transform)]
 pub struct Ball;
 
-#[derive(Component, Default)]
+#[derive(Component, Debug, Clone)]
 #[require(Transform)]
 pub struct Visualization(String);
 
@@ -126,6 +207,36 @@ fn receive_update_events(
     }
 }
 
+#[allow(clippy::type_complexity)]
+fn handle_render_settings_change(
+    mut commands: Commands,
+    render_settings: Res<RenderSettings>,
+    (q_fields, q_robots, q_balls): (
+        Query<Entity, (With<Field>, With<SceneRoot>)>,
+        Query<Entity, With<Robot>>,
+        Query<Entity, With<Ball>>,
+    ),
+) {
+    if !render_settings.is_changed() {
+        return;
+    }
+
+    // Remove all potentially outdated entities. They will be recreated automatically.
+    // Does not affect visualizations, as they get regenerated every frame anyways.
+    if !render_settings.field {
+        // The field is also used for data processing, so here only the model will be removed
+        q_fields
+            .iter()
+            .for_each(|e| _ = commands.entity(e).remove::<SceneRoot>());
+    }
+    q_robots
+        .iter()
+        .for_each(|e| commands.entity(e).despawn_recursive());
+    if !render_settings.ball {
+        q_balls.iter().for_each(|e| commands.entity(e).despawn());
+    }
+}
+
 fn update_game_state(q_field: Single<(&mut Field, &StateFilter)>) {
     let (mut field, state_filter) = q_field.into_inner();
     let new_game_state = state_filter.current_game_state();
@@ -139,34 +250,37 @@ fn update_game_state(q_field: Single<(&mut Field, &StateFilter)>) {
 #[allow(clippy::type_complexity)]
 fn update_field_geometry(
     mut commands: Commands,
+    render_settings: Res<RenderSettings>,
     (mut mesh_assets, mut material_assets, mut scene_assets): (
         ResMut<Assets<Mesh>>,
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<Scene>>,
     ),
-    q_field: Single<(&mut Field, &StateFilter, Entity)>,
+    q_field: Single<(&mut Field, &StateFilter, Option<&SceneRoot>, Entity)>,
 ) {
-    let (mut field, state_filter, field_entity) = q_field.into_inner();
+    let (mut field, state_filter, field_model_root, field_entity) = q_field.into_inner();
     let Some(new_field_geom) = state_filter.field_geometry_update() else {
         return;
     };
 
-    if field.geometry != new_field_geom {
+    if render_settings.field && (field.geometry != new_field_geom || field_model_root.is_none()) {
         commands.entity(field_entity).remove::<SceneRoot>();
 
         let field_model = field_mesh(&new_field_geom, &mut mesh_assets, &mut material_assets);
         commands
             .entity(field_entity)
             .insert(SceneRoot(scene_assets.add(field_model)));
-
-        field.geometry = new_field_geom;
     }
+
+    field.geometry = new_field_geom;
 }
 
 #[allow(clippy::type_complexity)]
 fn update_world_state(
     mut commands: Commands,
+    render_settings: Res<RenderSettings>,
     asset_server: Res<AssetServer>,
+    robot_mask_mesh: Res<RobotMaskMeshHandles>,
     (q_field, mut q_robots, mut q_balls): (
         Single<(&StateFilter, Entity), With<Field>>,
         Query<(&Robot, &Team, &mut Transform, &Parent, Entity), Without<Ball>>,
@@ -187,13 +301,11 @@ fn update_world_state(
         if let Some((mut ball_pos, _)) = q_balls.iter_mut().find(|(_, p)| p.get() == field_entity) {
             ball_pos.translation = new_ball_pos;
         } else {
-            let new_ball = commands
-                .spawn((
-                    Ball,
-                    Transform::from_translation(new_ball_pos),
-                    SceneRoot(asset_server.load("ball.glb#Scene0")),
-                ))
-                .id();
+            let mut new_ball = commands.spawn((Ball, Transform::from_translation(new_ball_pos)));
+            if render_settings.ball {
+                new_ball.insert(SceneRoot(asset_server.load("ball.glb#Scene0")));
+            }
+            let new_ball = new_ball.id();
             commands.entity(field_entity).add_child(new_ball);
         }
     } else {
@@ -227,19 +339,30 @@ fn update_world_state(
                 t.rotation = Quat::from_rotation_y(robot_update.phi);
             } else {
                 // Add new robot
-                let new_robot = commands
-                    .spawn((
-                        Robot(robot_update.id as u8),
-                        team,
-                        Transform {
-                            // Remap coordinates into bevy's coordinate conventions
-                            translation: new_robot_pos,
-                            rotation: Quat::from_rotation_y(robot_update.phi),
-                            ..Transform::default()
-                        },
-                        SceneRoot(asset_server.load("robots/generic.glb#Scene0")),
-                    ))
-                    .id();
+                let mut new_robot = commands.spawn((
+                    Robot(robot_update.id as u8),
+                    team,
+                    Transform {
+                        // Remap coordinates into bevy's coordinate conventions
+                        translation: new_robot_pos,
+                        rotation: Quat::from_rotation_y(robot_update.phi),
+                        ..Transform::default()
+                    },
+                ));
+                match render_settings.robots {
+                    RobotRenderSettings::Detailed => todo!(),
+                    RobotRenderSettings::Fallback => {
+                        new_robot.insert(SceneRoot(asset_server.load("robots/generic.glb#Scene0")));
+                    }
+                    RobotRenderSettings::Cutout => {
+                        new_robot.insert((
+                            Mesh3d(robot_mask_mesh.0.clone()),
+                            MeshMaterial3d(robot_mask_mesh.1.clone()),
+                        ));
+                    }
+                    RobotRenderSettings::None => {}
+                }
+                let new_robot = new_robot.id();
                 commands.entity(field_entity).add_child(new_robot);
             }
         }
@@ -265,6 +388,7 @@ pub struct VisualizationModels {
 #[allow(clippy::type_complexity)]
 fn update_visualizations(
     mut commands: Commands,
+    render_settings: Res<RenderSettings>,
     mut vis_models: Local<VisualizationModels>,
     (mut mesh_assets, mut material_assets): (
         ResMut<Assets<Mesh>>,
@@ -292,85 +416,89 @@ fn update_visualizations(
             }
         });
 
-    // Generate + Spawn new visualization meshes
-    for visualization in new_visualizations {
-        for part in &visualization.part {
-            let border_color = part
-                .border_style
-                .and_then(|s| s.color)
-                .map_or(Color::srgba_u8(0, 0, 0, 255), |c| {
-                    Color::srgba_u8(c.red as u8, c.green as u8, c.blue as u8, c.alpha as u8)
-                });
+    if render_settings.visualizations {
+        // Generate + Spawn new visualization meshes
+        for visualization in new_visualizations {
+            for part in &visualization.part {
+                let border_color = part
+                    .border_style
+                    .and_then(|s| s.color)
+                    .map_or(Color::srgba_u8(0, 0, 0, 255), |c| {
+                        Color::srgba_u8(c.red as u8, c.green as u8, c.blue as u8, c.alpha as u8)
+                    });
 
-            let mat = StandardMaterial::from(border_color);
+                let mat = StandardMaterial::from(border_color);
 
-            let (mesh, pos) = match part.geom.as_ref() {
-                Some(Geom::Circle(c)) => {
-                    // Convert to integers to get more stable hashing
-                    let mm_radius = (c.radius * 1000.0) as u32;
-                    if let Some(handle) = vis_models.circle_vis.get(&mm_radius) {
-                        (handle.clone(), Vec2::new(c.p_x, c.p_y))
-                    } else {
-                        let new_handle = mesh_assets.add(circle_visualization_mesh(32, c.radius));
-                        vis_models.circle_vis.insert(mm_radius, new_handle.clone());
-                        (new_handle, Vec2::new(c.p_x, c.p_y))
+                let (mesh, pos) = match part.geom.as_ref() {
+                    Some(Geom::Circle(c)) => {
+                        // Convert to integers to get more stable hashing
+                        let mm_radius = (c.radius * 1000.0) as u32;
+                        if let Some(handle) = vis_models.circle_vis.get(&mm_radius) {
+                            (handle.clone(), Vec2::new(c.p_x, c.p_y))
+                        } else {
+                            let new_handle =
+                                mesh_assets.add(circle_visualization_mesh(32, c.radius));
+                            vis_models.circle_vis.insert(mm_radius, new_handle.clone());
+                            (new_handle, Vec2::new(c.p_x, c.p_y))
+                        }
                     }
-                }
-                Some(Geom::Polygon(poly)) if !poly.point.is_empty() => {
-                    let s = Vec2::new(poly.point[0].x, poly.point[0].y);
-                    // Convert to integers to get more stable hashing
-                    let mm_points = poly
-                        .point
-                        .iter()
-                        .map(|p| (((p.x - s.x) * 1000.0) as i32, ((p.y - s.y) * 1000.0) as i32))
-                        .collect::<Vec<_>>();
-                    if let Some(handle) = vis_models.polygon_vis.get(&mm_points) {
-                        (handle.clone(), s)
-                    } else {
-                        let new_handle = mesh_assets.add(polygon_visualization_mesh(&mm_points));
-                        vis_models.polygon_vis.insert(mm_points, new_handle.clone());
-                        (new_handle, s)
-                    }
-                }
-                Some(Geom::Path(path)) if !path.point.is_empty() => {
-                    let s = Vec2::new(path.point[0].x, path.point[0].y);
-                    // Don't cache path meshes, they usually change with every frame
-                    let new_handle = mesh_assets.add(path_visualization_mesh(
-                        &path
+                    Some(Geom::Polygon(poly)) if !poly.point.is_empty() => {
+                        let s = Vec2::new(poly.point[0].x, poly.point[0].y);
+                        // Convert to integers to get more stable hashing
+                        let mm_points = poly
                             .point
                             .iter()
-                            .map(|p| Vec2::new(p.x - s.x, p.y - s.y))
-                            .collect::<Vec<_>>(),
-                        0.01,
-                    ));
-                    (new_handle, s)
-                }
-                None => {
-                    warn!(
-                        "Invalid visualization part in {}: No geometry",
-                        &visualization.name
-                    );
-                    continue;
-                }
-                _ => {
-                    warn!(
-                        "Invalid visualization part in {}: Empty geometry",
-                        &visualization.name
-                    );
-                    continue;
-                }
-            };
+                            .map(|p| (((p.x - s.x) * 1000.0) as i32, ((p.y - s.y) * 1000.0) as i32))
+                            .collect::<Vec<_>>();
+                        if let Some(handle) = vis_models.polygon_vis.get(&mm_points) {
+                            (handle.clone(), s)
+                        } else {
+                            let new_handle =
+                                mesh_assets.add(polygon_visualization_mesh(&mm_points));
+                            vis_models.polygon_vis.insert(mm_points, new_handle.clone());
+                            (new_handle, s)
+                        }
+                    }
+                    Some(Geom::Path(path)) if !path.point.is_empty() => {
+                        let s = Vec2::new(path.point[0].x, path.point[0].y);
+                        // Don't cache path meshes, they usually change with every frame
+                        let new_handle = mesh_assets.add(path_visualization_mesh(
+                            &path
+                                .point
+                                .iter()
+                                .map(|p| Vec2::new(p.x - s.x, p.y - s.y))
+                                .collect::<Vec<_>>(),
+                            0.01,
+                        ));
+                        (new_handle, s)
+                    }
+                    None => {
+                        warn!(
+                            "Invalid visualization part in {}: No geometry",
+                            &visualization.name
+                        );
+                        continue;
+                    }
+                    _ => {
+                        warn!(
+                            "Invalid visualization part in {}: Empty geometry",
+                            &visualization.name
+                        );
+                        continue;
+                    }
+                };
 
-            let new_vis = commands
-                .spawn((
-                    Visualization(visualization.name.clone()),
-                    Transform::from_xyz(pos.x, 0.001, pos.y),
-                    Mesh3d(mesh),
-                    MeshMaterial3d(material_assets.add(mat)),
-                ))
-                .id();
+                let new_vis = commands
+                    .spawn((
+                        Visualization(visualization.name.clone()),
+                        Transform::from_xyz(pos.x, 0.001, pos.y),
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material_assets.add(mat)),
+                    ))
+                    .id();
 
-            commands.entity(field_entity).add_child(new_vis);
+                commands.entity(field_entity).add_child(new_vis);
+            }
         }
     }
 

@@ -24,10 +24,11 @@ fn test_init(mut commands: Commands) {
     commands.spawn((
         Transform::from_xyz(-5.0, 2.0, -5.0),
         PanOrbitCamera::default(),
+        bevy::core_pipeline::prepass::DepthPrepass,
     ));
     commands.spawn((
         Transform {
-            translation: Vec3::new(0.0, 0.0, 5.0),  
+            translation: Vec3::new(0.0, 0.0, 5.0),
             rotation: Quat::from_rotation_z(90.0_f32.to_radians()),
             ..Default::default()
         },
