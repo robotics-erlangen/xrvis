@@ -1,17 +1,17 @@
 [package]
 name = "xrvis"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bevy = "0.15"
 bevy_panorbit_camera = "0.23.0"
+bevy-inspector-egui = "0.29.1"
 
 async-net = "2.0.0"
 async-channel = "2.3.1"
 prost = "0.13.5"
 procedural_modelling = { version = "0.3.0", default-features = false, features = ["bevy"] }
-bevy-inspector-egui = "0.29.1"
 
 [build-dependencies]
 prost-build = "0.13.5"
