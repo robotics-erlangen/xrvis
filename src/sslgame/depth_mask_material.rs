@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
 
+// TODO: statically include shader as a string
 const SHADER_ASSET_PATH: &str = "shaders/discard_fragment.wgsl";
 
 // This struct defines the data that will be passed to your shader

@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package amun_compact;
+package status_streaming;
 
 message Status {
     optional uint64 timestamp = 1;
@@ -17,18 +17,18 @@ message TeamInfo {
 }
 
 message FieldGeometry {
-    required float field_width = 1;
-    required float field_height = 2;
+    required float field_size_x = 1;
+    required float field_size_y = 2;
     optional float boundary_width = 3;
-    required float defense_width = 4;
-    required float defense_height = 5;
+    required float defense_size_x = 4;
+    required float defense_size_y = 5;
     required float goal_width = 6;
 }
 
 // ==== World State ====
 
 message WorldState {
-    optional Ball ball = 1;
+    repeated Ball ball = 1;
     repeated Robot yellow_robot = 2;
     repeated Robot blue_robot = 3;
 }
@@ -54,7 +54,7 @@ message VisualizationGroup {
 }
 
 message Visualization {
-    required string name = 1;
+    required uint32 id = 1;
     repeated VisPart part = 2;
 }
 
