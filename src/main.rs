@@ -30,38 +30,28 @@ fn main() {
 fn spawn_new_hosts(
     mut commands: Commands,
     available_hosts: Res<AvailableHosts>,
-    mut q_spawned_fields: Query<(&Field, Entity)>,
+    mut q_spawned_fields: Query<Entity, With<Field>>,
 ) {
     if !available_hosts.is_changed() {
         return;
     }
 
-    let old_hosts = q_spawned_fields
+    // Remove old fields
+    q_spawned_fields
         .iter_mut()
-        .map(|(field, entity)| (&field.host, entity))
-        .collect::<Vec<_>>();
+        .for_each(|field_entity| commands.entity(field_entity).despawn_recursive());
 
-    // Remove fields of old hosts
-    old_hosts
-        .iter()
-        .filter(|(old_host, _)| {
-            available_hosts
-                .0
-                .iter()
-                .all(|new_host| new_host != *old_host)
-        })
-        .for_each(|(_, removed_entity)| {
-            commands.entity(*removed_entity).despawn_recursive();
-        });
-
-    // Spawn fields with update tasks for each new host
-    // TODO: Spawn multiple hosts in a grid
+    // Spawn fields for each new host in a grid
     available_hosts
         .0
         .iter()
-        .filter(|new_host| old_hosts.iter().all(|(old_host, _)| new_host != old_host))
-        .for_each(|new_host| {
-            commands.spawn(Field::bind(new_host.clone()));
+        .enumerate()
+        .for_each(|(i, new_host)| {
+            let z_pos = (i * 10) as f32 - ((available_hosts.0.len() - 1) as f32 * 5.0);
+            commands.spawn((
+                Field::bind(new_host.clone()),
+                Transform::from_xyz(0.0, 0.0, z_pos),
+            ));
         });
 }
 

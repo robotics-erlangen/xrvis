@@ -313,10 +313,12 @@ fn receive_host_advertisements(
                         addr: SocketAddrV6::new(addr, host.instance_port as u16, 0, 0),
                         hostname: host.hostname,
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<HashSet<_>>();
 
-                available_hosts.0.clear();
-                available_hosts.0.extend(new_hosts);
+                // Only update the resource (and trigger change detection) when the hosts have actually changed
+                if new_hosts != available_hosts.0 {
+                    available_hosts.0 = new_hosts;
+                }
             }
         }
     } else {
