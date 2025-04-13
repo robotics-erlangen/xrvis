@@ -6,7 +6,7 @@ pub mod proto {
 mod depth_mask_material;
 mod mesh_generators;
 mod network_tasks;
-mod ssm_socket;
+mod networking;
 mod state_filter;
 
 use crate::sslgame::depth_mask_material::DepthMaskMaterial;
@@ -21,6 +21,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::tasks::{IoTaskPool, Task};
 use bevy::utils::HashMap;
+use network_interface::NetworkInterface;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::net::{Ipv6Addr, SocketAddrV6};
@@ -91,7 +92,7 @@ pub struct AvailableHosts(pub HashSet<FieldHost>);
 
 #[derive(Resource, Debug)]
 struct HostDiscoveryTask {
-    discovery_channel: Receiver<Vec<(Ipv6Addr, HostAdvertisement)>>,
+    discovery_channel: Receiver<Vec<((SocketAddrV6, NetworkInterface), HostAdvertisement)>>,
     discovery_task: Task<()>,
 }
 
@@ -176,6 +177,7 @@ impl Field {
             state_sender,
             multicast_address,
             *host.addr.ip(),
+            host.interface_index,
         ));
         let (vis_available_sender, vis_available_receiver) = async_channel::bounded(5);
         let (vis_selected_sender, vis_selected_receiver) = async_channel::bounded(5);
@@ -184,6 +186,7 @@ impl Field {
             vis_selected_receiver,
             multicast_address,
             host.addr,
+            host.interface_index,
         ));
 
         debug!(
@@ -212,6 +215,7 @@ impl Field {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldHost {
     pub addr: SocketAddrV6,
+    pub interface_index: u32,
     pub hostname: Option<String>,
 }
 
@@ -309,8 +313,9 @@ fn receive_host_advertisements(
             if let Ok(new_hosts) = discovery_task.discovery_channel.try_recv() {
                 let new_hosts = new_hosts
                     .into_iter()
-                    .map(|(addr, host)| FieldHost {
-                        addr: SocketAddrV6::new(addr, host.instance_port as u16, 0, 0),
+                    .map(|((addr, interface), host)| FieldHost {
+                        addr,
+                        interface_index: interface.index,
                         hostname: host.hostname,
                     })
                     .collect::<HashSet<_>>();

@@ -1,3 +1,4 @@
+use crate::sslgame::networking::map_sockerr;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{Ipv6Addr, ToSocketAddrs};
 use std::{io, mem};
@@ -12,20 +13,11 @@ pub trait SSMSocketExtension<T> {
 #[cfg(unix)]
 use {
     libc::{
-        AF_INET6, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP, c_int, in6_addr, setsockopt, sockaddr_in6,
+        AF_INET6, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP, in6_addr, setsockopt, sockaddr_in6,
         sockaddr_storage, socklen_t,
     },
     std::os::fd::{AsRawFd, OwnedFd},
 };
-
-#[cfg(unix)]
-fn handle_sockerr(res: c_int) -> io::Result<()> {
-    if res == -1 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
 
 #[cfg(unix)]
 impl<T: AsRawFd + TryFrom<OwnedFd, Error = io::Error>> SSMSocketExtension<T> for T {
@@ -89,7 +81,7 @@ impl<T: AsRawFd + TryFrom<OwnedFd, Error = io::Error>> SSMSocketExtension<T> for
             gsr_source: ipv6addr_to_sockaddr_storage(source, if_index),
         };
 
-        match unsafe {
+        map_sockerr(unsafe {
             setsockopt(
                 self.as_raw_fd(),
                 IPPROTO_IPV6,
@@ -97,10 +89,8 @@ impl<T: AsRawFd + TryFrom<OwnedFd, Error = io::Error>> SSMSocketExtension<T> for
                 (&req as *const GroupSourceReq).cast(),
                 size_of::<GroupSourceReq>() as socklen_t,
             )
-        } {
-            -1 => Err(io::Error::last_os_error()),
-            _ => Ok(()),
-        }
+        })
+        .map(|_| ())
     }
 }
 
@@ -109,18 +99,9 @@ use {
     std::os::windows::io::{AsRawSocket, OwnedSocket},
     windows_sys::Win32::Networking::WinSock::{
         AF_INET6, GROUP_SOURCE_REQ, IN6_ADDR, IN6_ADDR_0, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP,
-        SOCKADDR_IN6, SOCKADDR_IN6_0, SOCKADDR_STORAGE, SOCKET, SOCKET_ERROR, setsockopt,
+        SOCKADDR_IN6, SOCKADDR_IN6_0, SOCKADDR_STORAGE, SOCKET, setsockopt,
     },
 };
-
-#[cfg(windows)]
-fn handle_sockerr(res: i32) -> io::Result<()> {
-    if res == SOCKET_ERROR {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
 
 #[cfg(windows)]
 impl<T: AsRawSocket + TryFrom<OwnedSocket, Error = io::Error>> SSMSocketExtension<T> for T {
@@ -181,7 +162,7 @@ impl<T: AsRawSocket + TryFrom<OwnedSocket, Error = io::Error>> SSMSocketExtensio
             gsr_source: ipv6addr_to_sockaddr_storage(source, if_index),
         };
 
-        handle_sockerr(unsafe {
+        map_sockerr(unsafe {
             setsockopt(
                 self.as_raw_socket() as SOCKET,
                 IPPROTO_IPV6,
@@ -190,5 +171,6 @@ impl<T: AsRawSocket + TryFrom<OwnedSocket, Error = io::Error>> SSMSocketExtensio
                 size_of::<GROUP_SOURCE_REQ>() as i32,
             )
         })
+        .map(|_| ())
     }
 }

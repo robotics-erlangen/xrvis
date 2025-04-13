@@ -3,15 +3,11 @@ syntax = "proto2";
 package status_streaming;
 
 message HostAdvertisement {
-    // Main port used for this host:
-    // - The port on which the host listens for client data requests.
-    // - Group-id of the source-specific multicast address used for sending data and vis advertisements
-    required uint32 instance_port = 1;
-    optional string hostname = 2;
-    optional string yellow_team_name = 3;
-    optional string blue_team_name = 4;
-    optional bool is_live = 5;
-    optional bool supports_unicast = 6;
+    optional string hostname = 1;
+    optional string yellow_team_name = 2;
+    optional string blue_team_name = 3;
+    optional bool is_live = 4;
+    optional bool supports_unicast = 5;
 }
 
 message VisAdvertisement {

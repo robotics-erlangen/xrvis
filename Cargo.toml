@@ -15,20 +15,21 @@ async-net = "2.0.0"
 async-channel = "2.3.1"
 prost = "0.13.5"
 socket2 = "0.5.9"
+network-interface = "2.0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.171"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = "0.59.0"
+windows-sys = { version = "0.59.0", features = ["Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
 [build-dependencies]
 prost-build = "0.13.5"
 
-# Enable a small amount of optimization in the dev profile.
+# Enable optimizations for dependencies, even in dev mode
+
 [profile.dev]
 opt-level = 1
 
-# Enable a large amount of optimization in the dev profile for dependencies.
 [profile.dev.package."*"]
 opt-level = 3
