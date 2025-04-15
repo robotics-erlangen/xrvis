@@ -137,7 +137,13 @@ pub async fn vis_select_task(
     let mut selected_vis = DataRequest::default();
     let tx_socket = UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).await.unwrap();
 
-    while let Ok(size) = rx_socket.recv(&mut rx_buf).await {
+    while let Ok((size, packet_source)) = rx_socket.recv_from(&mut rx_buf).await {
+        // Manually filter packets because linux delivers packets from a joined multicast address
+        // to all sockets bound to the same port, not just the one that actually joined the group
+        if packet_source != SocketAddr::V6(source) {
+            continue;
+        }
+
         let available_vis = VisAdvertisement::decode(&rx_buf[..size]).unwrap();
 
         match available_out.try_send(available_vis) {
@@ -161,18 +167,24 @@ pub async fn vis_select_task(
 pub async fn status_rx_task(
     status_out: Sender<Status>,
     mcast_addr: Ipv6Addr,
-    source_addr: Ipv6Addr,
+    source: SocketAddrV6,
     if_index: u32,
 ) {
     let mut rx_buf = [0u8; 65535]; // Max size of an udp datagram
     let rx_socket = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, DATA_PORT)).unwrap();
     rx_socket
-        .join_ssm_v6(mcast_addr, source_addr, if_index)
+        .join_ssm_v6(mcast_addr, *source.ip(), if_index)
         .unwrap();
 
     let mut warn_timeout = Instant::now();
 
-    while let Ok(size) = rx_socket.recv(&mut rx_buf).await {
+    while let Ok((size, packet_source)) = rx_socket.recv_from(&mut rx_buf).await {
+        // Manually filter packets because linux delivers packets from a joined multicast address
+        // to all sockets bound to the same port, not just the one that actually joined the group
+        if packet_source != SocketAddr::V6(source) {
+            continue;
+        }
+
         let status = Status::decode(&rx_buf[..size]).unwrap();
 
         match status_out.try_send(status) {

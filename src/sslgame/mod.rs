@@ -176,7 +176,7 @@ impl Field {
         let state_rx_task = IoTaskPool::get().spawn(network_tasks::status_rx_task(
             state_sender,
             multicast_address,
-            *host.addr.ip(),
+            host.addr,
             host.interface_index,
         ));
         let (vis_available_sender, vis_available_receiver) = async_channel::bounded(5);
