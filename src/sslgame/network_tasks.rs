@@ -103,7 +103,9 @@ pub async fn host_discovery_task(
                 hosts.retain(|((a, _), _)| *a != new_source_addr);
                 hosts.push(((new_source_addr, source_if), new_host));
             } else if !hosts.iter().any(|((a, _), info)| {
-                (new_host.hostname.is_some() && info.hostname == new_host.hostname)
+                (new_host.hostname.is_some()
+                    && info.hostname == new_host.hostname
+                    && a.port() == new_source_addr.port())
                     || *a == new_source_addr
             }) {
                 // Received packet from previously unknown host -> Add to list
