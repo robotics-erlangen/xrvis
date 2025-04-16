@@ -19,13 +19,15 @@ const DATA_PORT: u16 = 11001;
 const VIS_AD_PORT: u16 = 11002;
 
 pub async fn host_discovery_task(
-    host_list_out: Sender<Vec<((SocketAddrV6, NetworkInterface), HostAdvertisement)>>,
+    host_list_out: Sender<Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)>>,
 ) {
-    // Listen on all interfaces by creating a new socket for each one.
-    // This is necessary because getting the origin interface of a packet is very difficult on windows (see https://github.com/rust-lang/socket2/pull/447)
+    // Listen for host advertisements on all network interfaces.
+    // It is important to get the source interface of incoming packets to know where to listen for their hosts' data.
+    // Unfortunately, the only easy cross-platform way to do this is to create a separate socket for each interface.
+    // (see https://github.com/rust-lang/socket2/pull/447)
     let mut sockets: Vec<(UdpSocket, NetworkInterface)> = Vec::new();
 
-    // Collect all unique packets received in three-second windows
+    // Collect packets in three-second windows
     let mut next_time = Instant::now();
     loop {
         next_time += Duration::from_secs(3);
@@ -80,7 +82,7 @@ pub async fn host_discovery_task(
             packet_stream = packet_stream.or(stream).boxed()
         }
 
-        let mut hosts: Vec<((SocketAddrV6, NetworkInterface), HostAdvertisement)> = Vec::new();
+        let mut hosts: Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)> = Vec::new();
 
         // Collect packets from the merged stream until an error is encountered (the timeout also returns an error)
         while let Some(Ok((size, source_addr, source_if, rx_buf))) = packet_stream.next().await {
@@ -92,24 +94,27 @@ pub async fn host_discovery_task(
                 continue;
             };
 
-            // When the same host advert is received on multiple interfaces, one must be chosen deterministically to prevent flickering.
-            // The lowest interface with the lowest index is used because indices are given out in ascending order
-            // and more "native"/local interfaces like loopback tend to be registered first.
-            if hosts
-                .iter()
-                .any(|((a, i), _)| *a == new_source_addr && source_if.index < i.index)
-            {
-                // Received packet for a known host on a lower interface index -> Replace old host entry
-                hosts.retain(|((a, _), _)| *a != new_source_addr);
-                hosts.push(((new_source_addr, source_if), new_host));
-            } else if !hosts.iter().any(|((a, _), info)| {
+            // When the same host advert is received on multiple interfaces, which can happen with a virtual overlay network like tailscale, you have to listen for data on all of them.
+            // This is because these virtual interfaces sometimes only forward any-source multicast (the host ads), but not source-specific multicast traffic (the actual data).
+            // TODO: Test if there are reliable criteria to find the singular source interface:
+            // On linux, you could check the interface type with ioctl(sock, SIOCGIFHWADDR, &ifr).
+            // On windows, something similar can be achieved by checking the IfType after a GetAdaptersAddresses call.
+            // Of course this assumes that interfaces are properly labeled, which they often aren't to improve compatibility with naive programs.
+
+            if let Some(((_, interfaces), _)) = hosts.iter_mut().find(|((addr, ifs), _)| {
+                *addr == new_source_addr && !ifs.iter().any(|i| source_if.index == i.index)
+            }) {
+                // Received packet for a known host on a new interface
+                interfaces.push(source_if);
+                interfaces.sort_by_key(|i| i.index);
+            } else if !hosts.iter().any(|((addr, _), info)| {
                 (new_host.hostname.is_some()
                     && info.hostname == new_host.hostname
-                    && a.port() == new_source_addr.port())
-                    || *a == new_source_addr
+                    && addr.port() == new_source_addr.port())
+                    || *addr == new_source_addr
             }) {
-                // Received packet from previously unknown host -> Add to list
-                hosts.push(((new_source_addr, source_if), new_host));
+                // Received packet from previously unknown host
+                hosts.push(((new_source_addr, vec![source_if]), new_host));
             }
         }
 
@@ -126,13 +131,13 @@ pub async fn vis_select_task(
     selected_in: Receiver<Vec<u32>>,
     mcast_addr: Ipv6Addr,
     source: SocketAddrV6,
-    if_index: u32,
+    interfaces: Vec<u32>,
 ) {
     let mut rx_buf = [0u8; 65535]; // Max size of an udp datagram
     let rx_socket = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, VIS_AD_PORT)).unwrap();
-    rx_socket
-        .join_ssm_v6(mcast_addr, *source.ip(), if_index)
-        .unwrap();
+    for i in &interfaces {
+        rx_socket.join_ssm_v6(mcast_addr, *source.ip(), *i).unwrap();
+    }
 
     let mut selected_vis = DataRequest::default();
     let tx_socket = UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).await.unwrap();
@@ -168,13 +173,13 @@ pub async fn status_rx_task(
     status_out: Sender<Status>,
     mcast_addr: Ipv6Addr,
     source: SocketAddrV6,
-    if_index: u32,
+    interfaces: Vec<u32>,
 ) {
     let mut rx_buf = [0u8; 65535]; // Max size of an udp datagram
     let rx_socket = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, DATA_PORT)).unwrap();
-    rx_socket
-        .join_ssm_v6(mcast_addr, *source.ip(), if_index)
-        .unwrap();
+    for i in &interfaces {
+        rx_socket.join_ssm_v6(mcast_addr, *source.ip(), *i).unwrap();
+    }
 
     let mut warn_timeout = Instant::now();
 

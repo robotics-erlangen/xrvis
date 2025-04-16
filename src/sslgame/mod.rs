@@ -92,7 +92,7 @@ pub struct AvailableHosts(pub HashSet<FieldHost>);
 
 #[derive(Resource, Debug)]
 struct HostDiscoveryTask {
-    discovery_channel: Receiver<Vec<((SocketAddrV6, NetworkInterface), HostAdvertisement)>>,
+    discovery_channel: Receiver<Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)>>,
     discovery_task: Task<()>,
 }
 
@@ -177,7 +177,7 @@ impl Field {
             state_sender,
             multicast_address,
             host.addr,
-            host.interface_index,
+            host.interfaces.clone(),
         ));
         let (vis_available_sender, vis_available_receiver) = async_channel::bounded(5);
         let (vis_selected_sender, vis_selected_receiver) = async_channel::bounded(5);
@@ -186,7 +186,7 @@ impl Field {
             vis_selected_receiver,
             multicast_address,
             host.addr,
-            host.interface_index,
+            host.interfaces.clone(),
         ));
 
         debug!(
@@ -215,7 +215,7 @@ impl Field {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldHost {
     pub addr: SocketAddrV6,
-    pub interface_index: u32,
+    pub interfaces: Vec<u32>,
     pub hostname: Option<String>,
 }
 
@@ -313,9 +313,9 @@ fn receive_host_advertisements(
             if let Ok(new_hosts) = discovery_task.discovery_channel.try_recv() {
                 let new_hosts = new_hosts
                     .into_iter()
-                    .map(|((addr, interface), host)| FieldHost {
+                    .map(|((addr, interfaces), host)| FieldHost {
                         addr,
-                        interface_index: interface.index,
+                        interfaces: interfaces.iter().map(|i| i.index).collect(),
                         hostname: host.hostname,
                     })
                     .collect::<HashSet<_>>();

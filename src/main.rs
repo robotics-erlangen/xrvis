@@ -41,18 +41,18 @@ fn spawn_new_hosts(
         .iter_mut()
         .for_each(|field_entity| commands.entity(field_entity).despawn_recursive());
 
-    // Spawn fields for each new host in a grid
-    available_hosts
-        .0
-        .iter()
-        .enumerate()
-        .for_each(|(i, new_host)| {
-            let z_pos = (i * 10) as f32 - ((available_hosts.0.len() - 1) as f32 * 5.0);
-            commands.spawn((
-                Field::bind(new_host.clone()),
-                Transform::from_xyz(0.0, 0.0, z_pos),
-            ));
-        });
+    // Spawn fields for each new host in a line. Sort by address to maintain a consistent order
+    // of the remaining elements after one of them has been removed.
+    let mut new_hosts = available_hosts.0.iter().collect::<Vec<_>>();
+    new_hosts.sort_unstable_by_key(|h| h.addr);
+    debug!("New Hosts: {:?}", new_hosts);
+    new_hosts.into_iter().enumerate().for_each(|(i, new_host)| {
+        let z_pos = (i * 10) as f32 - ((available_hosts.0.len() - 1) as f32 * 5.0);
+        commands.spawn((
+            Field::bind(new_host.clone()),
+            Transform::from_xyz(0.0, 0.0, z_pos),
+        ));
+    });
 }
 
 fn test_init(mut commands: Commands) {
