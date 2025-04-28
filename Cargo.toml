@@ -8,7 +8,7 @@ bevy = "0.15"
 bevy_panorbit_camera = "0.25.0"
 bevy-inspector-egui = "0.30.0"
 
-procedural_modelling = { version = "0.3.0", default-features = false, features = ["bevy"] }
+earcut = "0.4.4"
 
 async-io = "2.4.0"
 async-net = "2.0.0"

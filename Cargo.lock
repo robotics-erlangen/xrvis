@@ -2069,6 +2069,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f25c0e292a7ca6d6498557ff1df68f32c99850012b6ea401cf8daf771f22ff53"
 
 [[package]]
+name = "earcut"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d565e947a723df9f069393f8c3e723cf386ff9a052443339235ae2a4d9ffee3f"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "ecolor"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2654,8 +2663,6 @@ version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash",
 ]
 
@@ -3903,21 +3910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "procedural_modelling"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e18b05fbc825ab3570364fa81e30fa59b1ac9df3a720c30864698b94f550466"
-dependencies = [
- "bevy",
- "itertools 0.13.0",
- "lazy_static",
- "num-traits",
- "rand",
- "spade",
- "web-sys",
-]
-
-[[package]]
 name = "profiling"
 version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4252,12 +4244,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57397d16646700483b67d2dd6511d79318f9d057fdbd21a4066aeac8b41d310a"
 
 [[package]]
-name = "robust"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbf4a6aa5f6d6888f39e980649f3ad6b666acdce1d78e95b8a2cb076e687ae30"
-
-[[package]]
 name = "rodio"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4549,18 +4535,6 @@ checksum = "4f5fd57c80058a56cf5c777ab8a126398ece8e442983605d280a44ce79d0edef"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "spade"
-version = "2.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ece03ff43cd2a9b57ebf776ea5e78bd30b3b4185a619f041079f4109f385034"
-dependencies = [
- "hashbrown 0.15.2",
- "num-traits",
- "robust",
- "smallvec",
 ]
 
 [[package]]
@@ -5998,9 +5972,9 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "bevy_panorbit_camera",
+ "earcut",
  "libc",
  "network-interface",
- "procedural_modelling",
  "prost",
  "prost-build",
  "socket2",
