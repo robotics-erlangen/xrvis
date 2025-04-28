@@ -2,6 +2,7 @@ pub mod sslgame;
 
 use crate::sslgame::{AvailableHosts, Field, VisSelection, ssl_game_plugin};
 use bevy::prelude::*;
+use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use std::collections::HashSet;
@@ -14,6 +15,9 @@ fn main() {
 
     // Dev plugins
     app.add_plugins(PanOrbitCameraPlugin);
+    app.add_plugins(EguiPlugin {
+        enable_multipass_for_primary_context: true,
+    });
     app.add_plugins(WorldInspectorPlugin::new());
 
     app.add_systems(Startup, test_init);
@@ -39,7 +43,7 @@ fn spawn_new_hosts(
     // Remove old fields
     q_spawned_fields
         .iter_mut()
-        .for_each(|field_entity| commands.entity(field_entity).despawn_recursive());
+        .for_each(|field_entity| commands.entity(field_entity).despawn());
 
     // Spawn fields for each new host in a line. Sort by address to maintain a consistent order
     // of the remaining elements after one of them has been removed.
@@ -63,16 +67,13 @@ fn test_init(mut commands: Commands) {
     ));
     commands.spawn((
         Transform {
-            translation: Vec3::new(0.0, 0.0, 5.0),
+            translation: Vec3::new(0.0, 5.0, 5.0),
             rotation: Quat::from_rotation_z(90.0_f32.to_radians()),
             ..Default::default()
         },
         DirectionalLight {
-            color: Default::default(),
             illuminance: 1000.0,
-            shadows_enabled: false,
-            shadow_depth_bias: 0.0,
-            shadow_normal_bias: 0.0,
+            ..DirectionalLight::default()
         },
     ));
 }

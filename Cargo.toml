@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.15"
-bevy_panorbit_camera = "0.25.0"
-bevy-inspector-egui = "0.30.0"
+bevy = "0.16.0"
+bevy_panorbit_camera = "0.26.0"
+bevy-inspector-egui = "0.31.0"
 
 earcut = "0.4.4"
 

@@ -17,10 +17,10 @@ use crate::sslgame::proto::status_streaming::vis_part::Geom;
 use crate::sslgame::proto::status_streaming::{HostAdvertisement, Status, VisAdvertisement};
 use crate::sslgame::state_filter::StateFilter;
 use async_channel::{Receiver, Sender};
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::render::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::tasks::{IoTaskPool, Task};
-use bevy::utils::HashMap;
 use network_interface::NetworkInterface;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
@@ -167,7 +167,7 @@ impl Field {
         // |  |  >>>> Magic number from 8000 to FFFF. Might be used to separate different services with similar protocols to this one in the future
         // |  > Site-Local scope
         // >>> Required for source-specific multicast addresses
-        // Hosts running on the same port on different devices may send to the same multicast group address, but their traffic can differentiated by its source address.
+        // Hosts running on the same port on different devices may send to the same multicast group address, but their traffic can be differentiated by its source address.
         let multicast_address = Ipv6Addr::from_bits(
             0xFF35_0000_0000_0000_0000_0000_8000_0000 + host.addr.port() as u128,
         );
@@ -344,7 +344,7 @@ fn receive_vis_advertisements(
 ) {
     for (field, mut vis_selection, entity) in q_fields.iter_mut() {
         if field.update_task.vis_select_task.is_finished() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
             return;
         }
         while let Ok(new_available) = field.update_task.vis_available_receiver.try_recv() {
@@ -363,7 +363,7 @@ fn receive_vis_advertisements(
 fn receive_field_updates(mut commands: Commands, mut q_fields: Query<(&mut Field, Entity)>) {
     for (mut field, entity) in q_fields.iter_mut() {
         if field.update_task.state_rx_task.is_finished() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
             return;
         }
         while let Ok(new_status) = field.update_task.state_receiver.try_recv() {
@@ -394,9 +394,7 @@ fn handle_render_settings_change(
             .iter()
             .for_each(|e| _ = commands.entity(e).remove::<SceneRoot>());
     }
-    q_robots
-        .iter()
-        .for_each(|e| commands.entity(e).despawn_recursive());
+    q_robots.iter().for_each(|e| commands.entity(e).despawn());
 }
 
 // ======== Update the world from the state filter ========
@@ -439,8 +437,8 @@ fn update_world_state(
     (ball_mesh, robot_mask_mesh): (Res<BallMesh>, Res<RobotMaskMesh>),
     (q_fields, mut q_robots, q_balls): (
         Query<(&Field, Entity)>,
-        Query<(&Robot, &Team, &mut Transform, &Parent, Entity)>,
-        Query<(&Transform, &Parent, Entity), (With<Ball>, Without<Robot>)>,
+        Query<(&Robot, &Team, &mut Transform, &ChildOf, Entity)>,
+        Query<(&Transform, &ChildOf, Entity), (With<Ball>, Without<Robot>)>,
     ),
 ) {
     for (field, field_entity) in &q_fields {
@@ -450,7 +448,7 @@ fn update_world_state(
         // Despawn old balls
         q_balls
             .iter()
-            .map(|(_, p, e)| (p.get(), e))
+            .map(|(_, c, e)| (c.parent(), e))
             .filter(|(p, _)| *p == field_entity)
             .for_each(|(_, e)| {
                 commands.entity(field_entity).remove_children(&[e]);
@@ -475,7 +473,7 @@ fn update_world_state(
         // Update robots
         let mut leftover_robots = q_robots
             .iter_mut()
-            .filter(|(_, _, _, p, _)| p.get() == field_entity)
+            .filter(|(_, _, _, c, _)| c.parent() == field_entity)
             .collect::<Vec<_>>();
 
         let mut update_robots = |team: Team, new_robots: Vec<status_streaming::Robot>| {
@@ -551,7 +549,7 @@ fn update_visualizations(
     ),
     (q_fields, q_visualizations): (
         Query<(&Field, &VisSelection, Entity)>,
-        Query<(&Visualization, &Parent, Entity)>,
+        Query<(&Visualization, &ChildOf, Entity)>,
     ),
 ) {
     for (field, vis_names, field_entity) in &q_fields {
@@ -561,17 +559,16 @@ fn update_visualizations(
         // Despawn old visualization meshes
         q_visualizations
             .iter()
-            .filter(|(_, p, _)| p.get() == field_entity)
+            .filter(|(_, c, _)| c.parent() == field_entity)
             .for_each(|(v, _, e)| {
                 let group = v.0 % group_count;
                 if updated_groups.contains(&group) {
-                    commands.entity(field_entity).remove_children(&[e]);
                     commands.entity(e).despawn();
                 }
             });
 
         if render_settings.visualizations {
-            // Generate + Spawn new visualization meshes
+            // Generate and Spawn new visualization meshes
             for visualization in new_visualizations {
                 for part in &visualization.part {
                     let border_color = part.border_style.and_then(|s| s.color).map_or(
@@ -665,16 +662,12 @@ fn update_visualizations(
                         }
                     };
 
-                    let new_vis = commands
-                        .spawn((
-                            Visualization(visualization.id),
-                            Transform::from_xyz(pos.x, 0.001, pos.y),
-                            Mesh3d(mesh),
-                            MeshMaterial3d(material_assets.add(mat)),
-                        ))
-                        .id();
-
-                    commands.entity(field_entity).add_child(new_vis);
+                    commands.entity(field_entity).with_child((
+                        Visualization(visualization.id),
+                        Transform::from_xyz(pos.x, 0.001, pos.y),
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material_assets.add(mat)),
+                    ));
                 }
             }
         }
