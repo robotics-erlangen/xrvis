@@ -31,7 +31,7 @@ use std::f32::consts::PI;
 ///         [0., 1.,  1.],
 ///     ], true, true)
 ///     // Close top face
-///     .with_closed_hole(true, true)
+///     .with_closed_hole(true)
 ///     .build(false);
 /// ```
 struct CustomMeshBuilder {
@@ -115,7 +115,7 @@ impl CustomMeshBuilder {
         )
     }
 
-    /// Insert raw vertex data without creating a new face. Mostly used as a starting point for [`Self::insert_quad_loft`].
+    /// Insert raw vertex data without creating a new face. Mostly used as a starting point for [`Self::quad_loft`].
     ///
     /// The inserted vertices will be selected.
     fn insert_vertices(&mut self, vertices: impl IntoIterator<Item = [f32; 3]>) {
@@ -131,13 +131,10 @@ impl CustomMeshBuilder {
     }
 
     /// Creates a new face out the currently selected vertices.
-    /// Controlling the insertion order of the last vertices might not always be possible,
-    /// so the winding order of the created face can be manually reversed.
+    /// See implementation for winding details, but it usually behaves as expected.
     ///
     /// The used vertices will stay selected.
-    fn close_hole(&mut self, flat_shading: bool, reverse_winding: bool) {
-        // TODO: Detect winding direction from the previous indices. Assume CCW if they are free
-
+    fn close_hole(&mut self, flat_shading: bool) {
         if flat_shading {
             self.vertices
                 .extend_from_within((self.vertices.len() - self.last_operation)..);
@@ -154,23 +151,27 @@ impl CustomMeshBuilder {
         let mut indices_out: Vec<u32> = Vec::new();
         Earcut::new().earcut(vert_2d, &[], &mut indices_out);
 
-        if reverse_winding {
+        // Reverse winding if operating on used vertices.
+        // This isn't always correct, but it's probably what the user intended:
+        // .with_vertices().close_hole(): Behaves like insert_polygon()
+        // .with_quad_loft().close_hole(): "Encloses" the space started by insert_polygon
+        if self.free_vertices >= self.last_operation {
+            self.indices
+                .extend(indices_out.into_iter().map(|i| start_index as u32 + i))
+        } else {
             self.indices.extend(
                 indices_out
                     .into_iter()
                     .map(|i| start_index as u32 + i)
                     .rev(),
             )
-        } else {
-            self.indices
-                .extend(indices_out.into_iter().map(|i| start_index as u32 + i))
         }
 
         self.free_vertices = 0;
     }
     /// Chainable version of [`Self::close_hole`]
-    fn with_closed_hole(mut self, flat_shading: bool, reverse_winding: bool) -> Self {
-        self.close_hole(flat_shading, reverse_winding);
+    fn with_closed_hole(mut self, flat_shading: bool) -> Self {
+        self.close_hole(flat_shading);
         self
     }
 
@@ -215,7 +216,7 @@ impl CustomMeshBuilder {
     /// The newly inserted vertices will be selected.
     fn insert_polygon(&mut self, vertices: impl IntoIterator<Item = [f32; 3]>) {
         self.insert_vertices(vertices);
-        self.close_hole(true, false);
+        self.close_hole(true);
     }
     /// Chainable version of [`Self::insert_polygon`].
     fn with_polygon(mut self, vertices: impl IntoIterator<Item = [f32; 3]>) -> Self {
@@ -287,7 +288,7 @@ impl CustomMeshBuilder {
     /// |   |   |
     /// 1 - 2 - 3
     /// ```
-    fn insert_quad_loft(
+    fn quad_loft(
         &mut self,
         vertices: impl IntoIterator<Item = [f32; 3]>,
         close_loop: bool,
@@ -345,14 +346,14 @@ impl CustomMeshBuilder {
         self.last_operation = segment_length;
         self.free_vertices = 0;
     }
-    /// Chainable version of [`Self::insert_quad_loft`].
+    /// Chainable version of [`Self::quad_loft`].
     fn with_quad_loft(
         mut self,
         vertices: impl IntoIterator<Item = [f32; 3]>,
         close_loop: bool,
         flat_shading: bool,
     ) -> Self {
-        self.insert_quad_loft(vertices, close_loop, flat_shading);
+        self.quad_loft(vertices, close_loop, flat_shading);
         self
     }
 }
@@ -478,7 +479,7 @@ pub fn field_mesh(
             true,
             true,
         )
-        .with_closed_hole(true, true);
+        .with_closed_hole(true);
 
     let goal_blue_mesh = CustomMeshBuilder::new()
         .with_vertices([
@@ -509,7 +510,7 @@ pub fn field_mesh(
             true,
             true,
         )
-        .with_closed_hole(true, true);
+        .with_closed_hole(true);
 
     // ==== Lines ====
 
@@ -521,7 +522,7 @@ pub fn field_mesh(
         CENTER_CIRCLE_RADIUS - LINE_HALF,
         128,
     ));
-    line_mesh.insert_quad_loft(
+    line_mesh.quad_loft(
         circle_vertices([0.0, 0.0001, 0.0], CENTER_CIRCLE_RADIUS + LINE_HALF, 128),
         true,
         false,
@@ -541,7 +542,7 @@ pub fn field_mesh(
         [border_x - LINE_HALF, 0.0001, border_y - LINE_HALF],
         [border_x - LINE_HALF, 0.0001, -border_y + LINE_HALF],
     ]);
-    line_mesh.insert_quad_loft(
+    line_mesh.quad_loft(
         [
             [-border_x - LINE_HALF, 0.0001, -border_y - LINE_HALF],
             [-border_x - LINE_HALF, 0.0001, border_y + LINE_HALF],
@@ -562,7 +563,7 @@ pub fn field_mesh(
         [-defense_x - LINE_HALF, 0.0001, -defense_y + LINE_HALF],
         [-border_x, 0.0001, -defense_y + LINE_HALF],
     ]);
-    line_mesh.insert_quad_loft(
+    line_mesh.quad_loft(
         [
             [-border_x, 0.0001, defense_y + LINE_HALF],
             [-defense_x + LINE_HALF, 0.0001, defense_y + LINE_HALF],
@@ -580,7 +581,7 @@ pub fn field_mesh(
         [defense_x + LINE_HALF, 0.0001, defense_y - LINE_HALF],
         [border_x, 0.0001, defense_y - LINE_HALF],
     ]);
-    line_mesh.insert_quad_loft(
+    line_mesh.quad_loft(
         [
             [border_x, 0.0001, -defense_y - LINE_HALF],
             [defense_x - LINE_HALF, 0.0001, -defense_y - LINE_HALF],
@@ -633,15 +634,15 @@ pub fn polygon_visualization_mesh(vertices: &[Vec2]) -> Mesh {
         .zip(vertices.iter().cycle().skip(1))
         .map(|(a, b)| (b.x - a.x) * (b.y + a.y))
         .sum::<f32>()
-        < 0.0;
+        > 0.0;
 
     if is_ccw {
         CustomMeshBuilder::new()
-            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]).rev())
+            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]))
             .build(false)
     } else {
         CustomMeshBuilder::new()
-            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]))
+            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]).rev())
             .build(false)
     }
 }
