@@ -1,4 +1,4 @@
 /.idea
 /.stfolder
-/target
+**/target
 .stignore

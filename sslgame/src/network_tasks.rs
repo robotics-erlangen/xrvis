@@ -1,10 +1,10 @@
 use super::proto::status_streaming::{DataRequest, HostAdvertisement, Status, VisAdvertisement};
-use crate::sslgame::networking::interface_flags::NetworkInterfaceFlagExtension;
-use crate::sslgame::networking::ssm_socket::SSMSocketExtension;
 use async_channel::{Receiver, Sender, TrySendError};
 use async_net::UdpSocket;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::{StreamExt, stream};
+use net_ext::interface_flags::NetworkInterfaceFlagExtension;
+use net_ext::ssm_socket::SSMSocketExtension;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use prost::Message;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};

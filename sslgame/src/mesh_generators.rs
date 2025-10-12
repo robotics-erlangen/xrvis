@@ -1,4 +1,4 @@
-use crate::sslgame::FieldGeometry;
+use crate::FieldGeometry;
 use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::color::Color;
 use bevy::math::{Vec2, Vec3};

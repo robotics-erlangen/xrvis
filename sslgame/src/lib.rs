@@ -6,16 +6,15 @@ pub mod proto {
 mod depth_mask_material;
 mod mesh_generators;
 mod network_tasks;
-mod networking;
 mod state_filter;
 
-use crate::sslgame::depth_mask_material::DepthMaskMaterial;
-use crate::sslgame::mesh_generators::*;
-use crate::sslgame::network_tasks::host_discovery_task;
-use crate::sslgame::proto::status_streaming;
-use crate::sslgame::proto::status_streaming::vis_part::Geom;
-use crate::sslgame::proto::status_streaming::{HostAdvertisement, Status, VisAdvertisement};
-use crate::sslgame::state_filter::StateFilter;
+use crate::depth_mask_material::DepthMaskMaterial;
+use crate::mesh_generators::*;
+use crate::network_tasks::host_discovery_task;
+use crate::proto::status_streaming;
+use crate::proto::status_streaming::vis_part::Geom;
+use crate::proto::status_streaming::{HostAdvertisement, Status, VisAdvertisement};
+use crate::state_filter::StateFilter;
 use async_channel::{Receiver, Sender};
 use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::platform::collections::HashMap;

@@ -1,6 +1,6 @@
-use crate::sslgame::proto::status_streaming;
-use crate::sslgame::proto::status_streaming::vis_part::Geom;
-use crate::sslgame::{FieldGeometry, GameState};
+use crate::proto::status_streaming;
+use crate::proto::status_streaming::vis_part::Geom;
+use crate::{FieldGeometry, GameState};
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
 use std::f32::consts::PI;
@@ -214,9 +214,9 @@ impl StateFilter {
                 && (min_time > TARGET_BUFFER_TIME.as_micros() as i64 * 2
                     || stutter_count > (self.health_tracking_period.as_secs() / 5) as u32)
             {
-                self.time_offset = self
-                    .time_offset
-                    .map(|old_offset| old_offset + (TARGET_BUFFER_TIME.as_micros() as i64 - min_time)); // Set offset so that there would have been 5ms extra buffer
+                self.time_offset = self.time_offset.map(|old_offset| {
+                    old_offset + (TARGET_BUFFER_TIME.as_micros() as i64 - min_time)
+                }); // Set offset so that there would have been 5ms extra buffer
                 self.buffer_health_tracker = Some(BufferHealthTracker {
                     min_buffer_health: AtomicI64::new(i64::MAX),
                     stutter_count: AtomicU32::new(0),

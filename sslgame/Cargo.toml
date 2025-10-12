@@ -1,0 +1,19 @@
+[package]
+name = "sslgame"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bevy.workspace = true
+earcut.workspace = true
+
+async-io.workspace = true
+async-net.workspace = true
+async-channel.workspace = true
+network-interface.workspace = true
+net-ext.workspace = true
+prost.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true

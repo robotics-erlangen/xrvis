@@ -1,35 +1,37 @@
-[package]
-name = "xrvis"
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90"
 
-[dependencies]
+[workspace]
+members = ["net-ext", "sslgame", "xrvis-desktop"]
+resolver = "3"
+
+[workspace.dependencies]
+net-ext = { path = "net-ext" }
+sslgame = { path = "sslgame" }
+
 bevy = "0.17.2"
-bevy_panorbit_camera = "0.30.0"
 bevy-inspector-egui = "0.34.0"
+bevy_panorbit_camera = "0.30.0"
 
 earcut = "0.4.4"
 
+async-channel = "2.5.0"
 async-io = "2.6.0"
 async-net = "2.0.0"
-async-channel = "2.5.0"
-prost = "0.14.1"
-socket2 = "0.6.0"
+
 network-interface = "2.0.3"
+prost = "0.14.1"
+prost-build = "0.14.1"
+socket2 = "0.6.0"
 
-[target.'cfg(unix)'.dependencies]
 libc = "0.2.171"
-
-[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
-[build-dependencies]
-prost-build = "0.14.1"
-
-# Enable optimizations for dependencies, even in dev mode
-
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
+# Prioritize iteration times for our code, but enable optimizations for all dependencies
+[profile.dev.package]
+net-ext.opt-level = 1
+sslgame.opt-level = 1
+xrvis-desktop.opt-level = 1
+"*".opt-level = 3

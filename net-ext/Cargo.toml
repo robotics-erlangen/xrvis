@@ -1,0 +1,15 @@
+[package]
+name = "net-ext"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+network-interface.workspace = true
+socket2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

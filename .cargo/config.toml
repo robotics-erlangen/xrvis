@@ -1,0 +1,3 @@
+[env]
+# Manually set the bevy asset root to share assets across the workspace
+BEVY_ASSET_ROOT = { value = ".", relative = true }

@@ -3468,6 +3468,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "net-ext"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "network-interface",
+ "socket2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "network-interface"
 version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4703,6 +4713,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844"
 dependencies = [
  "bitflags 2.9.4",
+]
+
+[[package]]
+name = "sslgame"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "async-io",
+ "async-net",
+ "bevy",
+ "earcut",
+ "net-ext",
+ "network-interface",
+ "prost",
+ "prost-build",
 ]
 
 [[package]]
@@ -6296,22 +6321,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fd8403733700263c6eb89f192880191f1b83e332f7a20371ddcf421c4a337c7"
 
 [[package]]
-name = "xrvis"
+name = "xrvis-desktop"
 version = "0.1.0"
 dependencies = [
- "async-channel",
- "async-io",
- "async-net",
  "bevy",
  "bevy-inspector-egui",
  "bevy_panorbit_camera",
- "earcut",
- "libc",
- "network-interface",
- "prost",
- "prost-build",
- "socket2",
- "windows-sys 0.61.2",
+ "sslgame",
 ]
 
 [[package]]
