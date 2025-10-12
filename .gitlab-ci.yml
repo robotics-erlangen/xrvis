@@ -3,7 +3,7 @@ stages:
 
 linux-x64-release:
   stage: build
-  image: xrvis-ci:1.85
+  image: xrvis-ci:1.90
   script:
     - mold -run cargo build --release
   artifacts:
@@ -12,7 +12,7 @@ linux-x64-release:
 
 windows-x64-release:
   stage: build
-  image: xrvis-ci:1.85
+  image: xrvis-ci:1.90
   script:
     - mold -run cargo build --release --target x86_64-pc-windows-gnu
   artifacts:

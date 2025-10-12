@@ -2,9 +2,9 @@ use crate::sslgame::FieldGeometry;
 use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::color::Color;
 use bevy::math::{Vec2, Vec3};
+use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use earcut::Earcut;
 use std::f32::consts::PI;
 

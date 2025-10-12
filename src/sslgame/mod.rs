@@ -17,9 +17,9 @@ use crate::sslgame::proto::status_streaming::vis_part::Geom;
 use crate::sslgame::proto::status_streaming::{HostAdvertisement, Status, VisAdvertisement};
 use crate::sslgame::state_filter::StateFilter;
 use async_channel::{Receiver, Sender};
+use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use bevy::render::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::tasks::{IoTaskPool, Task};
 use network_interface::NetworkInterface;
 use std::cmp::PartialEq;
@@ -37,12 +37,12 @@ pub fn ssl_game_plugin(app: &mut App) {
 
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
 
-    let robot_mask_mesh =
-        app.world_mut()
-            .resource_mut::<Assets<Mesh>>()
-            .add(bevy::render::mesh::MeshBuilder::build(
-                &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
-            ));
+    let robot_mask_mesh = app
+        .world_mut()
+        .resource_mut::<Assets<Mesh>>()
+        .add(MeshBuilder::build(
+            &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
+        ));
     let robot_mask_material = app
         .world_mut()
         .resource_mut::<Assets<DepthMaskMaterial>>()
@@ -50,12 +50,13 @@ pub fn ssl_game_plugin(app: &mut App) {
     app.insert_resource(RobotMaskMesh(robot_mask_mesh, robot_mask_material));
 
     // FIXME: Ball in the ground
-    let ball_mesh =
-        app.world_mut()
-            .resource_mut::<Assets<Mesh>>()
-            .add(bevy::render::mesh::MeshBuilder::build(
-                &SphereMeshBuilder::new(0.0215, SphereKind::Ico { subdivisions: 3 }),
-            ));
+    let ball_mesh = app
+        .world_mut()
+        .resource_mut::<Assets<Mesh>>()
+        .add(MeshBuilder::build(&SphereMeshBuilder::new(
+            0.0215,
+            SphereKind::Ico { subdivisions: 3 },
+        )));
     let ball_material = app
         .world_mut()
         .resource_mut::<Assets<StandardMaterial>>()

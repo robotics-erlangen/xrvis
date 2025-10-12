@@ -4,27 +4,27 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16.0"
-bevy_panorbit_camera = "0.26.0"
-bevy-inspector-egui = "0.31.0"
+bevy = "0.17.2"
+bevy_panorbit_camera = "0.30.0"
+bevy-inspector-egui = "0.34.0"
 
 earcut = "0.4.4"
 
-async-io = "2.4.0"
+async-io = "2.6.0"
 async-net = "2.0.0"
-async-channel = "2.3.1"
-prost = "0.13.5"
-socket2 = "0.5.9"
-network-interface = "2.0.1"
+async-channel = "2.5.0"
+prost = "0.14.1"
+socket2 = "0.6.0"
+network-interface = "2.0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.171"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59.0", features = ["Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
 [build-dependencies]
-prost-build = "0.13.5"
+prost-build = "0.14.1"
 
 # Enable optimizations for dependencies, even in dev mode
 

@@ -15,9 +15,7 @@ fn main() {
 
     // Dev plugins
     app.add_plugins(PanOrbitCameraPlugin);
-    app.add_plugins(EguiPlugin {
-        enable_multipass_for_primary_context: true,
-    });
+    app.add_plugins(EguiPlugin::default());
     app.add_plugins(WorldInspectorPlugin::new());
 
     app.add_systems(Startup, test_init);
