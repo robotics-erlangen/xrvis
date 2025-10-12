@@ -35,7 +35,7 @@ pub async fn host_discovery_task(
         // Create sockets for new interfaces
         if let Ok(if_list) = NetworkInterface::show() {
             // Drop all sockets for removed interfaces
-            sockets.retain(|(_, olf_if)| !if_list.contains(olf_if));
+            sockets.retain(|(_, old_if)| if_list.contains(old_if));
 
             // Create new sockets for new interfaces
             let new_interfaces = if_list
