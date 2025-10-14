@@ -1,5 +1,10 @@
 use bevy::prelude::*;
 use sslgame::{AvailableHosts, Field, VisSelection, ssl_game_plugin};
+/*use bevy_nokhwa::BevyNokhwaPlugin;
+use bevy_nokhwa::camera::BackgroundCamera;
+use bevy_nokhwa::nokhwa::utils::{
+    ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormatType, Resolution,
+};*/
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
@@ -9,6 +14,7 @@ fn main() {
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins);
+    //app.add_plugins(BevyNokhwaPlugin);
     app.add_plugins(ssl_game_plugin);
 
     // Dev plugins
@@ -60,6 +66,16 @@ fn test_init(mut commands: Commands) {
         Transform::from_xyz(0.0, 8.0, 9.0),
         PanOrbitCamera::default(),
         bevy::core_pipeline::prepass::DepthPrepass,
+        /*BackgroundCamera::new(
+            ApiBackend::Auto,
+            Some(CameraIndex::Index(0)),
+            Some(RequestedFormatType::Closest(CameraFormat::new(
+                Resolution::new(1920, 1080),
+                FrameFormat::MJPEG,
+                60,
+            ))),
+        )
+        .unwrap(),*/
     ));
     commands.spawn((
         Transform {

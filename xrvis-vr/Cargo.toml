@@ -1,0 +1,11 @@
+[package]
+name = "xrvis-vr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bevy.workspace = true
+bevy_mod_openxr.workspace = true
+bevy_mod_xr.workspace = true
+sslgame.workspace = true

@@ -4,7 +4,7 @@ edition = "2024"
 rust-version = "1.90"
 
 [workspace]
-members = ["net-ext", "sslgame", "xrvis-desktop"]
+members = ["net-ext", "sslgame", "xrvis-desktop", "xrvis-vr"]
 resolver = "3"
 
 [workspace.dependencies]
@@ -12,6 +12,8 @@ net-ext = { path = "net-ext" }
 sslgame = { path = "sslgame" }
 
 bevy = "0.17.2"
+bevy_mod_openxr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
+bevy_mod_xr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
 bevy-inspector-egui = "0.34.0"
 bevy_panorbit_camera = "0.30.0"
 
@@ -34,4 +36,5 @@ windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_IpHelpe
 net-ext.opt-level = 1
 sslgame.opt-level = 1
 xrvis-desktop.opt-level = 1
+xrvis-vr.opt-level = 1
 "*".opt-level = 3
