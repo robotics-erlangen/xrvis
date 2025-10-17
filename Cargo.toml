@@ -5,7 +5,7 @@ rust-version = "1.90"
 
 [workspace]
 members = ["net-ext", "sslgame", "xrvis-desktop", "xrvis-vr"]
-resolver = "3"
+resolver = "2"
 
 [workspace.dependencies]
 net-ext = { path = "net-ext" }
