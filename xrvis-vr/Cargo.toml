@@ -4,8 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+# The package has to be available as a library for android builds
 [lib]
-name = "xrvis_vr"
+name = "xrvis_vr_lib"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]

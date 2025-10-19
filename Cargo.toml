@@ -15,7 +15,7 @@ bevy = "0.17.2"
 bevy_mod_openxr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
 bevy_mod_xr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
 bevy-inspector-egui = "0.34.0"
-bevy_panorbit_camera = "0.30.0"
+bevy_panorbit_camera = "0.31.0"
 
 earcut = "0.4.4"
 
@@ -26,7 +26,7 @@ async-net = "2.0.0"
 network-interface = "2.0.3"
 prost = "0.14.1"
 prost-build = "0.14.1"
-socket2 = "0.6.0"
+socket2 = "0.6.1"
 
 libc = "0.2.171"
 windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
@@ -38,3 +38,6 @@ sslgame.opt-level = 1
 xrvis-desktop.opt-level = 1
 xrvis-vr.opt-level = 1
 "*".opt-level = 3
+
+[profile.release]
+panic = "abort"
