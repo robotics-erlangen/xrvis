@@ -28,6 +28,10 @@ fn get_if_flags(if_name: &str) -> io::Result<c_short> {
 
     unsafe {
         let socket = map_sockerr(socket(libc::AF_INET6, libc::SOCK_DGRAM, 0))?;
+        // For some reason, the android libc SIOCGIFFLAGS does not match the type expected by ioctl.
+        #[cfg(target_os = "android")]
+        let res = map_sockerr(ioctl(socket, libc::SIOCGIFFLAGS as libc::c_int, &ifreq));
+        #[cfg(not(target_os = "android"))]
         let res = map_sockerr(ioctl(socket, libc::SIOCGIFFLAGS, &ifreq));
         close(socket);
         res?;

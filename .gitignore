@@ -1,4 +1,5 @@
 /.idea
-/.stfolder
-**/target
+/target
+.stfolder
 .stignore
+.DS_Store
