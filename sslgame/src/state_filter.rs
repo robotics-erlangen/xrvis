@@ -267,7 +267,7 @@ fn interpolate_world_state(
                         id: pr.id,
                         p_x: pr.p_x + ratio * (nr.p_x - pr.p_x),
                         p_y: pr.p_y + ratio * (nr.p_y - pr.p_y),
-                        phi: pr.phi + ratio * (nr.phi - pr.phi),
+                        phi: pr.phi + ratio * ((nr.phi - pr.phi + PI).rem_euclid(2.0 * PI) - PI),
                     })
             })
             .collect()
