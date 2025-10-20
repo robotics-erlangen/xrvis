@@ -2,4 +2,6 @@
 /.gradle
 /build
 /captures
+/keystore.jks
+/keystore.properties
 /local.properties

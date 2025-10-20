@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application") version "8.13.0"
 }
@@ -35,6 +38,11 @@ androidComponents.onVariants { variant ->
     variant.sources.jniLibs?.addGeneratedSourceDirectory(cargoTask) { outputDir }
 }
 
+// Load signing properties from an uncommitted properties file
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+
 android {
     namespace = "de.erforce.xrvis_vr"
     compileSdk {
@@ -53,6 +61,15 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("keystore.jks")
+            storePassword = keystoreProperties["storePassword"] as String
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
@@ -61,6 +78,7 @@ android {
         release {
             isDebuggable = false
             isJniDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
