@@ -1,3 +1,4 @@
+use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::render::view::NoIndirectDrawing;
 use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
 use bevy_mod_openxr::add_xr_plugins;
@@ -47,8 +48,7 @@ pub fn main() -> AppExit {
             }
         })
         .add_systems(Startup, setup)
-        // Disable indirect drawing because its gpu culling breaks on quest and msaa because it is really inefficient on mobile
-        .add_systems(Update, (disable_indirect, disable_msaa))
+        .add_systems(Update, modify_cameras)
         .add_systems(
             Update,
             spawn_new_hosts.run_if(resource_changed::<AvailableHosts>),
@@ -62,24 +62,23 @@ pub fn main() -> AppExit {
     app.run()
 }
 
-fn disable_indirect(
-    mut commands: Commands,
-    cameras: Query<Entity, (With<Camera>, Without<NoIndirectDrawing>)>,
-) {
-    for entity in cameras {
-        commands.entity(entity).insert(NoIndirectDrawing);
-    }
-}
-
 #[derive(Component)]
-struct MsaaModified;
+struct CameraModified;
 
-fn disable_msaa(
+fn modify_cameras(
     mut commands: Commands,
-    cameras: Query<Entity, (With<Camera>, Without<MsaaModified>)>,
+    cameras: Query<Entity, (With<Camera>, Without<CameraModified>)>,
 ) {
     for cam in cameras {
-        commands.entity(cam).insert(Msaa::Off).insert(MsaaModified);
+        commands
+            .entity(cam)
+            // The depth prepass is required for robot cutouts
+            .insert(DepthPrepass)
+            // Gpu culling breaks on quest
+            .insert(NoIndirectDrawing)
+            // Bevy's MSAA is really inefficient on mobile
+            .insert(Msaa::Off)
+            .insert(CameraModified);
     }
 }
 
