@@ -72,7 +72,7 @@ pub fn ssl_game_plugin(app: &mut App) {
                 receive_host_advertisements,
                 receive_vis_advertisements,
                 receive_field_updates,
-                handle_render_settings_change,
+                handle_render_settings_change.run_if(resource_changed::<RenderSettings>),
             ),
             (
                 update_game_state,
@@ -372,27 +372,28 @@ fn receive_field_updates(mut commands: Commands, mut q_fields: Query<(&mut Field
     }
 }
 
+#[derive(Component)]
+pub struct FieldModelInstance(bevy::scene::InstanceId);
+
 #[allow(clippy::type_complexity)]
 fn handle_render_settings_change(
     mut commands: Commands,
+    mut scene_spawner: ResMut<SceneSpawner>,
     render_settings: Res<RenderSettings>,
     (q_fields, q_robots, _q_balls): (
-        Query<Entity, (With<Field>, With<SceneRoot>)>,
+        Query<(&FieldModelInstance, Entity)>,
         Query<Entity, With<Robot>>,
         Query<Entity, With<Ball>>,
     ),
 ) {
-    if !render_settings.is_changed() {
-        return;
-    }
-
     // Remove all potentially outdated entities. They will be recreated automatically.
     // Does not affect visualizations and balls, as they get regenerated every frame anyways.
     if !render_settings.field {
-        // The field is also used as a marker for data processing, so only the model will be removed
-        q_fields
-            .iter()
-            .for_each(|e| _ = commands.entity(e).remove::<SceneRoot>());
+        // The field entity is also used as a marker for data processing, so only the model is removed
+        for (instance, field_entity) in q_fields {
+            scene_spawner.despawn_instance(instance.0);
+            _ = commands.entity(field_entity).remove::<FieldModelInstance>();
+        }
     }
     q_robots.iter().for_each(|e| commands.entity(e).despawn());
 }
@@ -408,22 +409,32 @@ fn update_game_state(mut q_fields: Query<(&Field, &mut GameState)>) {
 #[allow(clippy::type_complexity)]
 fn update_field_geometry(
     mut commands: Commands,
+    mut scene_spawner: ResMut<SceneSpawner>,
     render_settings: Res<RenderSettings>,
     (mut mesh_assets, mut material_assets, mut scene_assets): (
         ResMut<Assets<Mesh>>,
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<Scene>>,
     ),
-    mut q_fields: Query<(&Field, &mut FieldGeometry, Option<&SceneRoot>, Entity)>,
+    mut q_fields: Query<(
+        &Field,
+        &mut FieldGeometry,
+        Option<&FieldModelInstance>,
+        Entity,
+    )>,
 ) {
-    for (field, mut field_geometry, model_root, entity) in &mut q_fields {
+    for (field, mut field_geometry, modes_instance, entity) in &mut q_fields {
         let new_field_geom = field.state_filter.current_field_geometry();
 
-        if render_settings.field && (*field_geometry != new_field_geom || model_root.is_none()) {
+        if render_settings.field && (*field_geometry != new_field_geom || modes_instance.is_none())
+        {
+            if let Some(instance) = modes_instance {
+                scene_spawner.despawn_instance(instance.0);
+            }
             let field_model = field_mesh(&new_field_geom, &mut mesh_assets, &mut material_assets);
-            commands
-                .entity(entity)
-                .insert(SceneRoot(scene_assets.add(field_model)));
+            commands.entity(entity).insert(FieldModelInstance(
+                scene_spawner.spawn_as_child(scene_assets.add(field_model), entity),
+            ));
             *field_geometry = new_field_geom;
         }
     }
