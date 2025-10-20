@@ -12,8 +12,8 @@ net-ext = { path = "net-ext" }
 sslgame = { path = "sslgame" }
 
 bevy = "0.17.2"
-bevy_mod_openxr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
-bevy_mod_xr = { git = "https://github.com/S4ndf1re/bevy_oxr.git", branch = "version_bump" }
+bevy_mod_openxr = { version = "0.4.0", features = ["fb_passthrough"] }
+bevy_mod_xr = "0.4.0"
 bevy-inspector-egui = "0.34.0"
 bevy_panorbit_camera = "0.31.0"
 

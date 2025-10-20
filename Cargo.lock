@@ -1115,28 +1115,46 @@ checksum = "7ef8e4b7e61dfe7719bb03c884dc270cd46a82efb40f93e9933b990c5c190c59"
 
 [[package]]
 name = "bevy_mod_openxr"
-version = "0.3.0"
-source = "git+https://github.com/S4ndf1re/bevy_oxr.git?branch=version_bump#9d27b6cd6e27ff50c982fd2503a4b0be6a27511e"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ead3d12dc1c364bc8f5d063c8cd82df23a3d6261807abecfbbca70ca3cb2c15"
 dependencies = [
  "android_system_properties",
  "ash",
- "bevy",
+ "bevy_app",
+ "bevy_camera",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_math",
  "bevy_mod_xr",
+ "bevy_platform",
+ "bevy_render",
+ "bevy_transform",
  "jni 0.20.0",
  "ndk-context",
  "openxr",
  "thiserror 2.0.17",
  "wgpu",
  "wgpu-hal",
- "winapi",
 ]
 
 [[package]]
 name = "bevy_mod_xr"
-version = "0.3.0"
-source = "git+https://github.com/S4ndf1re/bevy_oxr.git?branch=version_bump#9d27b6cd6e27ff50c982fd2503a4b0be6a27511e"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4107b79e3e3b38bc57a7c3fceb465300070b4bc3d2ebd839a9e04468b06cc11c"
 dependencies = [
- "bevy",
+ "bevy_app",
+ "bevy_camera",
+ "bevy_color",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_gizmos",
+ "bevy_log",
+ "bevy_math",
+ "bevy_render",
+ "bevy_transform",
 ]
 
 [[package]]
