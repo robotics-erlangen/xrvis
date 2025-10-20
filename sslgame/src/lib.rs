@@ -152,7 +152,7 @@ struct BallMesh(Handle<Mesh>, Handle<StandardMaterial>);
 // ======== Field components ========
 
 #[derive(Component, Debug)]
-#[require(GameState, FieldGeometry, VisSelection, Transform)]
+#[require(GameState, FieldGeometry, VisSelection, Transform, Visibility)]
 pub struct Field {
     pub host: FieldHost,
     update_task: FieldUpdateTask,
