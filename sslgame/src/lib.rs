@@ -105,7 +105,7 @@ pub enum RobotRenderSettings {
     None,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Resource, Clone, Debug)]
 pub struct RenderSettings {
     pub field: bool,
     pub robots: RobotRenderSettings,

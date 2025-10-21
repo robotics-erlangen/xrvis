@@ -10,6 +10,8 @@ use bevy_mod_openxr::types::EnvironmentBlendMode;
 use sslgame::{AvailableHosts, Field, VisSelection, ssl_game_plugin};
 use std::collections::HashSet;
 
+mod interaction;
+
 #[bevy_main]
 pub fn main() -> AppExit {
     let mut app = App::new();
@@ -47,6 +49,7 @@ pub fn main() -> AppExit {
                 selection.selected = selection.available.keys().copied().collect::<HashSet<_>>();
             }
         })
+        .add_plugins(interaction::interaction_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
         .add_systems(
@@ -82,46 +85,42 @@ fn modify_cameras(
     }
 }
 
-// Temporarily use the basic field distribution from the desktop verison
 fn spawn_new_hosts(
     mut commands: Commands,
     available_hosts: Res<AvailableHosts>,
-    mut q_spawned_fields: Query<Entity, With<Field>>,
+    q_spawned_field: Option<Single<(&Field, Entity)>>,
 ) {
-    // Remove old fields
-    q_spawned_fields
-        .iter_mut()
-        .for_each(|field_entity| commands.entity(field_entity).despawn());
+    let new_hosts = &available_hosts.0;
 
-    // Spawn fields for each new host in a line. Sort by address to maintain a consistent order
-    // of the remaining elements after one of them has been removed.
-    let mut new_hosts = available_hosts.0.iter().collect::<Vec<_>>();
-    new_hosts.sort_unstable_by_key(|h| h.addr);
-    debug!("New Hosts: {:?}", new_hosts);
-    new_hosts.into_iter().enumerate().for_each(|(i, new_host)| {
-        let z_pos = (i * 10) as f32 - ((available_hosts.0.len() - 1) as f32 * 5.0);
-        commands.spawn((
-            Field::bind(new_host.clone()),
-            Transform::from_xyz(0.0, 0.0, z_pos),
-        ));
-    });
+    if let Some(new_host) = new_hosts.iter().next() {
+        match q_spawned_field.as_deref() {
+            // Replace the field if it is not one of the new hosts, but a different one is there to replace it
+            Some((field, entity)) if !new_hosts.iter().any(|h| field.host.addr == h.addr) => {
+                commands.entity(*entity).despawn();
+                commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
+            }
+            // Spawn a new field if there isn't one currently spawned
+            None => {
+                commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
+            }
+            _ => {}
+        }
+    }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    // Floor
-    let mut white: StandardMaterial = Color::WHITE.into();
-    white.unlit = true;
+fn setup(mut commands: Commands, mut gizmo_assets: ResMut<Assets<GizmoAsset>>) {
+    // Origin marker
+    let mut asset = GizmoAsset::new();
+    asset.circle(
+        Isometry3d::IDENTITY,
+        0.1,
+        bevy::color::palettes::basic::WHITE,
+    );
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(1.5))),
-        MeshMaterial3d(materials.add(white)),
-        Transform {
-            translation: Vec3::new(0., -0.001, 0.),
-            rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
-            ..Transform::IDENTITY
+        Gizmo {
+            handle: gizmo_assets.add(asset),
+            ..default()
         },
+        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 }
