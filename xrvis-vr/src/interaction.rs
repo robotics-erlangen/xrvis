@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::hands::{HandBone, LeftHand, RightHand, XrHandBoneEntities, XrHandBoneRadius};
 use sslgame::{Field, RenderSettings, RobotRenderSettings};
-use std::f32::consts::PI;
 
 pub fn interaction_plugin(app: &mut App) {
     app.add_systems(
@@ -101,13 +100,11 @@ fn left_hand_interaction(
 
 #[derive(Component)]
 pub struct RightHandInteractionState {
-    start_field_pos: Vec3,
-    start_field_rot: f32,
-    start_hand_pos: Vec3,
-    start_hand_rot: f32,
+    start_finger_pos: Vec3,
 }
 
 fn right_hand_interaction(
+    mut gizmos: Gizmos,
     mut commands: Commands,
     mut field: Option<Single<&mut Transform, With<Field>>>,
     mut right_hand: Option<
@@ -139,40 +136,41 @@ fn right_hand_interaction(
     };
 
     let finger_pos = thumb_transform.translation;
-    let finger_rot = thumb_transform.rotation.to_euler(EulerRot::YXZ).0;
 
     if let Some(state) = state {
+        gizmos.line(state.start_finger_pos, finger_pos, Color::WHITE);
         if thumb_transform
             .translation
             .distance(index_transform.translation)
             > (thumb_radius.0 + index_radius.0) * 1.5
         {
-            commands.entity(*hand).remove::<RightHandInteractionState>();
-        } else {
-            field_transform.translation =
-                state.start_field_pos + (finger_pos - state.start_hand_pos);
-            if thumb_transform
-                .translation
-                .distance(field_transform.translation)
-                < 0.2
-            {
-                let ang_delta =
-                    ((finger_rot - state.start_hand_rot + PI).rem_euclid(2.0 * PI)) - PI;
-                field_transform.rotation = Quat::from_rotation_y(
-                    (state.start_field_rot + (ang_delta / 5.)).rem_euclid(2.0 * PI),
-                );
+            // Interaction finished -> Check results
+            if state.start_finger_pos.distance(finger_pos) > 1. {
+                // Only accept interaction with >1m of distance
+                field_transform.translation = state.start_finger_pos;
+                let mut dir = finger_pos - state.start_finger_pos;
+                dir.y = 0.0;
+                if dir.length_squared() > 1e-6 {
+                    let dir = dir.normalize();
+                    // Compute yaw so the field faces along dir while staying parallel to ground.
+                    // We build a rotation that aligns the field's local -Z axis to `dir`.
+                    // Angle around Y axis between -Z and `dir`:
+                    let yaw = f32::atan2(dir.x, dir.z);
+                    // Rotate around Y by -yaw so that -Z ends up pointing along `dir`.
+                    field_transform.rotation = Quat::from_rotation_y(yaw);
+                }
             }
+            commands.entity(*hand).remove::<RightHandInteractionState>();
         }
     } else if thumb_transform
         .translation
         .distance(index_transform.translation)
         < thumb_radius.0 + index_radius.0
+        && thumb_transform.translation.y < 0.5
     {
+        // Start interaction
         commands.entity(*hand).insert(RightHandInteractionState {
-            start_field_pos: field_transform.translation,
-            start_field_rot: field_transform.rotation.to_euler(EulerRot::YXZ).0,
-            start_hand_pos: finger_pos,
-            start_hand_rot: finger_rot,
+            start_finger_pos: finger_pos,
         });
     }
 }
