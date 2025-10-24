@@ -453,7 +453,7 @@ fn update_world_state(
     ),
 ) {
     for (field, field_entity) in &q_fields {
-        let world_state = field.state_filter.current_world_state();
+        let world_state = field.state_filter.current_world_state(true);
 
         // TODO: Correlate new to old balls and move them instead of recreating everything. Don't forget to update handle_render_settings_change
         // Despawn old balls

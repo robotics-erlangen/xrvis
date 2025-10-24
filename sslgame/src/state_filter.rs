@@ -82,7 +82,16 @@ impl StateFilter {
             .unwrap_or_default()
     }
 
-    pub fn current_world_state(&self) -> status_streaming::WorldState {
+    pub fn current_world_state(&self, filter: bool) -> status_streaming::WorldState {
+        if !filter {
+            return self
+                .packet_history
+                .iter()
+                .find_map(|p| p.1.world_state.as_ref())
+                .cloned()
+                .unwrap_or_default();
+        }
+
         let curr_timestamp = self.time_reference.elapsed().as_micros() as u64;
 
         // Find relevant packets
