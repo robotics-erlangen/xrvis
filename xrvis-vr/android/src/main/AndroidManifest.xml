@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:horizonos="http://schemas.horizonos/sdk">
+
+    <horizonos:uses-horizonos-sdk horizonos:minSdkVersion="69" horizonos:targetSdkVersion="69" />
 
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" />
     <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
@@ -13,9 +15,6 @@
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
         <meta-data android:name="com.oculus.ossplash" android:value="true"/>
         <meta-data android:name="com.oculus.ossplash.background" android:value="passthrough-contextual" />
-        <!-- Pico -->
-        <meta-data android:name="pvr.app.type" android:value="vr" />
-        <meta-data android:name="pvr.sdk.version" android:value="OpenXR" />
 
         <activity android:name="XrVisGameActivity"
             android:exported="true"
