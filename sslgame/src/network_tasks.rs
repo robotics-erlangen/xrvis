@@ -1,206 +1,353 @@
-use super::proto::status_streaming::{DataRequest, HostAdvertisement, Status, VisAdvertisement};
+use crate::proto::remote::*;
 use async_channel::{Receiver, Sender, TrySendError};
 use async_net::UdpSocket;
+use async_tungstenite::tungstenite;
 use bevy::prelude::*;
-use bevy::tasks::futures_lite::{StreamExt, stream};
+use bevy::tasks::futures_lite::{FutureExt, StreamExt, stream};
+use bytes::BytesMut;
 use net_ext::interface_flags::NetworkInterfaceFlagExtension;
 use net_ext::ssm_socket::SSMSocketExtension;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use prost::Message;
-use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use std::io;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::{Duration, Instant};
 
 // TODO: Leave multicast groups before stopping
 
-const HOST_DISCOVERY_ADDR: Ipv6Addr =
-    Ipv6Addr::from_bits(0xFF15_0000_0000_0000_0045_5246_6F72_6365); // "ERForce" in hex
-const HOST_DISCOVERY_PORT: u16 = 11000;
-const DATA_PORT: u16 = 11001;
-const VIS_AD_PORT: u16 = 11002;
+const BEACON_ADDR_V4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(239, 1, 1, 1), 11000);
+const BEACON_ADDR_V6: SocketAddrV6 = SocketAddrV6::new(
+    Ipv6Addr::from_bits(0xFF15_0000_0000_0045_5246_6F72_6365_0001), // "ERForce" in hex
+    11000,
+    0,
+    0,
+);
 
-pub async fn host_discovery_task(
-    host_list_out: Sender<Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)>>,
-) {
-    // Listen for host advertisements on all network interfaces.
-    // It is important to get the source interface of incoming packets to know where to listen for their hosts' data.
-    // Unfortunately, the only easy cross-platform way to do this is to create a separate socket for each interface.
-    // (see https://github.com/rust-lang/socket2/pull/447)
-    let mut sockets: Vec<(UdpSocket, NetworkInterface)> = Vec::new();
+pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertisement)>>) {
+    let socket_v4 = UdpSocket::bind_multicast((Ipv4Addr::UNSPECIFIED, BEACON_ADDR_V4.port()))
+        .expect("Failed to bind ipv4 discovery socket");
+    let socket_v6 = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, BEACON_ADDR_V6.port()))
+        .expect("Failed to bind ipv6 discovery socket");
 
-    // Collect packets in three-second windows
-    let mut next_time = Instant::now();
+    let mut host_map: HashMap<_, (_, _)> = HashMap::new();
+
+    // Forward discovery packets and check for new network interfaces every 3 seconds
+    let mut active_interfaces = Vec::new();
+    let mut next_interface_refresh = Instant::now();
     loop {
-        next_time += Duration::from_secs(3);
-
-        // Create sockets for new interfaces
-        if let Ok(if_list) = NetworkInterface::show() {
-            // Drop all sockets for removed interfaces
-            sockets.retain(|(_, old_if)| if_list.contains(old_if));
-
-            // Create new sockets for new interfaces
-            let new_interfaces = if_list
-                .into_iter()
-                .filter(|new_if| new_if.is_multicast() && new_if.is_up())
-                .filter(|new_if| !sockets.iter().any(|(_, old_if)| old_if == new_if))
-                .collect::<Vec<_>>();
-            new_interfaces
-                .into_iter()
-                .filter(|new_if| new_if.addr.iter().any(|a| a.ip().is_ipv6()))
-                .for_each(|new_if| {
-                    let new_sock =
-                        UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, HOST_DISCOVERY_PORT))
-                            .unwrap();
-                    if new_sock
-                        .join_multicast_v6(&HOST_DISCOVERY_ADDR, new_if.index)
-                        .is_ok()
-                    {
-                        sockets.push((new_sock, new_if));
-                    }
-                });
+        next_interface_refresh += Duration::from_secs(3);
+        // Forget old hosts
+        {
+            let cutoff = Instant::now() - Duration::from_secs(3);
+            host_map.retain(|_, (t, _)| *t > cutoff);
         }
 
-        // Create packet stream from all sockets.
-        // This stream returns the packets received by any socket and an io::ErrorKind::TimedOut error after a set timeout.
-        // The streams are merged with StreamExt::or, which is biased towards the first stream.
-        // This ensures that the timeout will always be returned right away and can't be blocked by a socket overloading the stream with too many packets.
-        let mut packet_stream = stream::once_future(async {
-            async_io::Timer::at(next_time).await;
-            Err(std::io::ErrorKind::TimedOut.into())
-        })
-        .boxed();
-        let individual_streams = sockets.iter().map(|(sock, sock_if)| {
-            stream::unfold(sock, async |sock| {
-                let mut rx_buf = [0u8; 1024]; // Small message, so 1kb should be enough
-                let result = sock
+        // ======== Update multicast subscriptions ========
+
+        match NetworkInterface::show() {
+            Ok(if_list) => {
+                // Get all relevant interfaces
+                let filtered_if_list: Vec<_> = if_list
+                    .into_iter()
+                    .filter(|new_if| new_if.is_multicast() && new_if.is_up())
+                    .collect();
+
+                // Subscribe on new interfaces
+                filtered_if_list
+                    .iter()
+                    .filter(|i| !active_interfaces.contains(&i.index))
+                    .for_each(|new_if| {
+                        if let Some(network_interface::Addr::V4(addr)) =
+                            new_if.addr.iter().find(|a| a.ip().is_ipv4())
+                        {
+                            _ = socket_v4.join_multicast_v4(*BEACON_ADDR_V4.ip(), addr.ip);
+                        } else if new_if.addr.iter().any(|a| a.ip().is_ipv6()) {
+                            _ = socket_v6.join_multicast_v6(BEACON_ADDR_V6.ip(), new_if.index);
+                        }
+                    });
+
+                active_interfaces = filtered_if_list.into_iter().map(|i| i.index).collect();
+            }
+            Err(e) => {
+                error!("Failed to get network interface list, skipping interface update: {e}");
+            }
+        }
+
+        // ======== Merge packet streams ========
+
+        fn make_packet_stream(
+            socket: &UdpSocket,
+        ) -> impl stream::Stream<Item = io::Result<(usize, SocketAddr, [u8; 256])>> + '_ {
+            // Hack to generate a packet stream from an udp socket. The socket is passed along as state.
+            stream::unfold(socket, async |socket| {
+                let mut rx_buf = [0u8; 256]; // Discovery packets are very small
+                let result = socket
                     .recv_from(&mut rx_buf)
                     .await
-                    .map(|(size, source_addr)| (size, source_addr, sock_if.clone(), rx_buf));
-                Some((result, sock))
+                    .map(|(size, source_addr)| (size, source_addr, rx_buf));
+                Some((result, socket))
             })
+        }
+
+        let stream_v4 = make_packet_stream(&socket_v4);
+        let stream_v6 = make_packet_stream(&socket_v6);
+        let stream_timeout = stream::once_future(async {
+            async_io::Timer::at(next_interface_refresh).await;
+            Err(io::ErrorKind::TimedOut.into())
         });
-        for stream in individual_streams {
-            packet_stream = packet_stream.or(stream).boxed()
-        }
 
-        let mut hosts: Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)> = Vec::new();
+        let mut merged_stream = stream_v4.or(stream_v6).or(stream_timeout).boxed();
 
-        // Collect packets from the merged stream until an error is encountered (the timeout also returns an error)
-        while let Some(Ok((size, source_addr, source_if, rx_buf))) = packet_stream.next().await {
-            let SocketAddr::V6(new_source_addr) = source_addr else {
-                continue;
-            };
-            let Ok(new_host) = HostAdvertisement::decode(&rx_buf[..size]) else {
-                debug!("Invalid host advertisement received from {new_source_addr}");
-                continue;
-            };
+        // ======== Collect packets from the merged stream until the timeout ========
 
-            // When the same host advert is received on multiple interfaces, which can happen with a virtual overlay network like tailscale, you have to listen for data on all of them.
-            // This is because these virtual interfaces sometimes only forward any-source multicast (the host ads), but not source-specific multicast traffic (the actual data).
-            // TODO: Test if there are reliable criteria to find the singular source interface:
-            // On linux, you could check the interface type with ioctl(sock, SIOCGIFHWADDR, &ifr).
-            // On windows, something similar can be achieved by checking the IfType after a GetAdaptersAddresses call.
-            // Of course this assumes that interfaces are properly labeled, which they often aren't to improve compatibility with naive programs.
+        loop {
+            match merged_stream
+                .next()
+                .await
+                .expect("The host discovery stream should never yield None")
+            {
+                Ok((size, source_addr, rx_buf)) => {
+                    let new_host = match HostAdvertisement::decode(&rx_buf[..size]) {
+                        Ok(host) => {
+                            debug!("Received host advertisement from {source_addr}");
+                            host
+                        }
+                        Err(e) => {
+                            warn!("Invalid host advertisement received from {source_addr}: {e}");
+                            continue;
+                        }
+                    };
 
-            if let Some(((_, interfaces), _)) = hosts.iter_mut().find(|((addr, ifs), _)| {
-                *addr == new_source_addr && !ifs.iter().any(|i| source_if.index == i.index)
-            }) {
-                // Received packet for a known host on a new interface
-                interfaces.push(source_if);
-                interfaces.sort_by_key(|i| i.index);
-            } else if !hosts.iter().any(|((addr, _), info)| {
-                (new_host.hostname.is_some()
-                    && info.hostname == new_host.hostname
-                    && addr.port() == new_source_addr.port())
-                    || *addr == new_source_addr
-            }) {
-                // Received packet from previously unknown host
-                hosts.push(((new_source_addr, vec![source_if]), new_host));
-            }
-        }
+                    match host_map.entry(source_addr) {
+                        Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
+                        Entry::Vacant(entry) => {
+                            entry.insert((Instant::now(), new_host));
+                        }
+                    }
 
-        match host_list_out.try_send(hosts) {
-            Err(TrySendError::Full(_)) => warn!("Host list channel full"),
-            Err(TrySendError::Closed(_)) => return,
-            _ => {}
-        }
-    }
-}
+                    let host_list: Vec<_> =
+                        host_map.iter().map(|(a, (_, h))| (*a, h.clone())).collect();
 
-pub async fn vis_select_task(
-    available_out: Sender<VisAdvertisement>,
-    selected_in: Receiver<Vec<u32>>,
-    mcast_addr: Ipv6Addr,
-    source: SocketAddrV6,
-    interfaces: Vec<u32>,
-) {
-    let mut rx_buf = [0u8; 65535]; // Max size of an udp datagram
-    let rx_socket = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, VIS_AD_PORT)).unwrap();
-    for i in &interfaces {
-        rx_socket.join_ssm_v6(mcast_addr, *source.ip(), *i).unwrap();
-    }
-
-    let mut selected_vis = DataRequest::default();
-    let tx_socket = UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).await.unwrap();
-
-    while let Ok((size, packet_source)) = rx_socket.recv_from(&mut rx_buf).await {
-        // Manually filter packets because linux delivers packets from a joined multicast address
-        // to all sockets bound to the same port, not just the one that actually joined the group
-        if packet_source != SocketAddr::V6(source) {
-            continue;
-        }
-
-        let available_vis = VisAdvertisement::decode(&rx_buf[..size]).unwrap();
-
-        match available_out.try_send(available_vis) {
-            Err(TrySendError::Full(_)) => warn!("Part rx channel full"),
-            Err(TrySendError::Closed(_)) => return,
-            _ => {}
-        }
-
-        if let Ok(new_selected) = selected_in.try_recv() {
-            selected_vis.visualization_id.clear();
-            new_selected
-                .into_iter()
-                .for_each(|vis| selected_vis.visualization_id.push(vis));
-        }
-        let mut tx_buf = vec![0u8; selected_vis.encoded_len()];
-        selected_vis.encode(&mut tx_buf).unwrap();
-        tx_socket.send_to(&tx_buf, source).await.unwrap();
-    }
-}
-
-pub async fn status_rx_task(
-    status_out: Sender<Status>,
-    mcast_addr: Ipv6Addr,
-    source: SocketAddrV6,
-    interfaces: Vec<u32>,
-) {
-    let mut rx_buf = [0u8; 65535]; // Max size of an udp datagram
-    let rx_socket = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, DATA_PORT)).unwrap();
-    for i in &interfaces {
-        rx_socket.join_ssm_v6(mcast_addr, *source.ip(), *i).unwrap();
-    }
-
-    let mut warn_timeout = Instant::now();
-
-    while let Ok((size, packet_source)) = rx_socket.recv_from(&mut rx_buf).await {
-        // Manually filter packets because linux delivers packets from a joined multicast address
-        // to all sockets bound to the same port, not just the one that actually joined the group
-        if packet_source != SocketAddr::V6(source) {
-            continue;
-        }
-
-        let status = Status::decode(&rx_buf[..size]).unwrap();
-
-        match status_out.try_send(status) {
-            Err(TrySendError::Full(_)) => {
-                if warn_timeout < Instant::now() {
-                    warn!("Status rx channel full (system can't keep up)");
-                    warn_timeout = Instant::now() + Duration::from_secs(5);
+                    match hosts_out.try_send(host_list) {
+                        Ok(_) => {}
+                        Err(TrySendError::Full(_)) => warn!("Host discovery channel full"),
+                        Err(TrySendError::Closed(_)) => {
+                            info!("Host discovery channel dropped, stopping discovery task");
+                            return;
+                        }
+                    }
+                }
+                Err(e) if e.kind() == io::ErrorKind::TimedOut => break,
+                Err(e) => {
+                    error!("Host discovery network error, stopping discovery task: {e}");
+                    return;
                 }
             }
-            Err(TrySendError::Closed(_)) => return,
-            _ => {}
         }
     }
+}
+
+/// Combination of the WsPacket and UdpPacket protobuf messages
+pub enum UpdatePacket {
+    FieldGeom(FieldGeometry),
+    GameState(GameState),
+    VisMappings(VisMappings),
+    WorldState(WorldState),
+    VisualizationUpdate(VisualizationUpdate),
+}
+
+impl From<ws_packet::Content> for UpdatePacket {
+    fn from(packet: ws_packet::Content) -> Self {
+        match packet {
+            ws_packet::Content::Geom(inner) => Self::FieldGeom(inner),
+            ws_packet::Content::GameState(inner) => Self::GameState(inner),
+            ws_packet::Content::VisMappings(inner) => Self::VisMappings(inner),
+        }
+    }
+}
+
+impl From<udp_packet::Content> for UpdatePacket {
+    fn from(packet: udp_packet::Content) -> Self {
+        match packet {
+            udp_packet::Content::WorldState(inner) => Self::WorldState(inner),
+            udp_packet::Content::VisUpdate(inner) => Self::VisualizationUpdate(inner),
+        }
+    }
+}
+
+pub async fn io_task(
+    host: SocketAddr,
+    packets_out: Sender<UpdatePacket>,
+    requests_in: Receiver<ws_request::Content>,
+) {
+    // ======== Socket setup ========
+
+    let mut udp_rx_buf = [0u8; 65535]; // Max size of an udp datagram
+
+    // Start websocket connection
+    let tcp_stream = async_net::TcpStream::connect(host)
+        .await
+        .unwrap_or_else(|_| panic!("Failed tcp connection to {host}"));
+    let (websocket, _) = async_tungstenite::client_async(format!("ws://{host}"), tcp_stream)
+        .await
+        .unwrap_or_else(|_| panic!("Failed websocket connection to {host}"));
+    let (mut ws_sender, ws_receiver) = websocket.split();
+
+    // Bind udp socket to any free port
+    let udp_socket = if host.is_ipv6() {
+        UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).await
+    } else {
+        UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await
+    }
+    .unwrap_or_else(|_| panic!("Failed to bind UDP socket for {host}"));
+    let udp_port = udp_socket.local_addr().unwrap().port();
+
+    // ======== Stream merging ========
+
+    enum StreamEvent {
+        WsRequest(ws_request::Content),
+        WsPacket(ws_packet::Content),
+        UdpPacket(udp_packet::Content),
+        None,
+    }
+
+    #[derive(Debug)]
+    #[allow(dead_code)] // The associated values are only for the Debug impl
+    enum RxError {
+        Tungstenite(tungstenite::Error),
+        Io(io::Error),
+        Decode(prost::DecodeError),
+    }
+
+    let ws_mapped = ws_receiver.map(|msg| {
+        let message = msg.map_err(RxError::Tungstenite)?;
+
+        match message {
+            tungstenite::Message::Text(_) => {
+                debug!("Received unexpected text message from {host}");
+                Ok(StreamEvent::None)
+            }
+            tungstenite::Message::Binary(bytes) => {
+                let packet = WsPacket::decode(bytes).map_err(RxError::Decode)?;
+                if let Some(packet_content) = packet.content {
+                    Ok(StreamEvent::WsPacket(packet_content))
+                } else {
+                    debug!("Received empty oneof protobuf field");
+                    Ok(StreamEvent::None)
+                }
+            }
+            tungstenite::Message::Ping(_) => {
+                // The pong response is sent automatically
+                Ok(StreamEvent::None)
+            }
+            tungstenite::Message::Pong(_) => {
+                debug!("Received unexpected pong message from {host}. The server should be the one *initiating* pings.");
+                Ok(StreamEvent::None)
+            }
+            tungstenite::Message::Close(_) => {
+                // TODO: Handle close messages
+                warn!("Proper websocket close handling is not implement yet");
+                Ok(StreamEvent::None)
+            }
+            tungstenite::Message::Frame(_) => {
+                unreachable!("Frame messages should never be passed through to user code")
+            }
+        }
+    }).filter(|r| r.is_err() || r.as_ref().is_ok_and(|e| !matches!(e, StreamEvent::None)));
+
+    // Hack to generate a packet stream from an udp socket. The socket is passed along as state.
+    let udp_mapped = stream::unfold(&udp_socket, |sock| async move {
+        let result = sock
+            .recv_from(&mut udp_rx_buf)
+            .await
+            .map_err(RxError::Io)
+            .and_then(|(size, _)| UdpPacket::decode(&udp_rx_buf[..size]).map_err(RxError::Decode))
+            .map(|p| {
+                if let Some(packet_content) = p.content {
+                    StreamEvent::UdpPacket(packet_content)
+                } else {
+                    debug!("Received empty oneof protobuf field");
+                    StreamEvent::None
+                }
+            });
+        Some((result, sock))
+    });
+
+    let req_mapped = requests_in.map(|r| Ok(StreamEvent::WsRequest(r)));
+
+    let mut combined_stream = ws_mapped.or(udp_mapped).or(req_mapped).boxed();
+
+    // ======== Event processing ========
+
+    let mut warn_cooldown = Instant::now();
+
+    // Returns false if the receiver was dropped and the thread sould be stopped
+    let mut packet_out_send = |packet: UpdatePacket| match packets_out.try_send(packet) {
+        Ok(_) => true,
+        Err(TrySendError::Full(_)) => {
+            if warn_cooldown < Instant::now() {
+                warn!("Status rx channel for {host} full (system can't keep up)");
+                warn_cooldown = Instant::now() + Duration::from_secs(5);
+            }
+            true
+        }
+        Err(TrySendError::Closed(_)) => {
+            debug!("Packet receiver for {host} dropped, stopping io task");
+            false
+        }
+    };
+
+    while let Some(event) = combined_stream
+        .next()
+        .or(async {
+            // At least a ping should be received every second
+            async_io::Timer::after(Duration::from_millis(1500)).await;
+            None
+        })
+        .await
+    {
+        let event = match event {
+            Ok(e) => e,
+            Err(e) => {
+                error!("Network error: {e:?}");
+                return;
+            }
+        };
+        match event {
+            StreamEvent::WsRequest(mut request_content) => {
+                // Outgoing: Send the request to the WebSocket server
+                if let ws_request::Content::UdpStreamReq(req) = &request_content {
+                    request_content = ws_request::Content::UdpStreamReq(UdpStreamRequest {
+                        port: udp_port as u32,
+                        ..req.clone()
+                    });
+                }
+                let request = WsRequest {
+                    content: Some(request_content),
+                };
+                let mut buf = BytesMut::new();
+                if request.encode(&mut buf).is_ok() {
+                    ws_sender
+                        .send(tungstenite::Message::Binary(buf.into()))
+                        .await
+                        .expect("Websocket closed");
+                }
+            }
+            StreamEvent::WsPacket(packet) => {
+                if !packet_out_send(packet.into()) {
+                    return;
+                }
+            }
+            StreamEvent::UdpPacket(packet) => {
+                if !packet_out_send(packet.into()) {
+                    return;
+                }
+            }
+            StreamEvent::None => {}
+        }
+    }
+
+    info!("Connection to {host} timed out");
 }

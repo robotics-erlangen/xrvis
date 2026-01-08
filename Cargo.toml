@@ -14,14 +14,17 @@ sslgame = { path = "sslgame" }
 bevy = "0.17.2"
 bevy_mod_openxr = { version = "0.4.0", features = ["fb_passthrough"] }
 bevy_mod_xr = "0.4.0"
-bevy-inspector-egui = "0.34.0"
-bevy_panorbit_camera = "0.31.0"
+bevy-inspector-egui = "0.35.0"
+bevy_panorbit_camera = "0.33.0"
+
+bytes = "1.11.0"
 
 earcut = "0.4.4"
 
 async-channel = "2.5.0"
 async-io = "2.6.0"
 async-net = "2.0.0"
+async-tungstenite = "0.32.0"
 
 network-interface = "2.0.3"
 prost = "0.14.1"

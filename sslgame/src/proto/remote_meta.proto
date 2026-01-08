@@ -1,0 +1,34 @@
+syntax = "proto2";
+
+package remote;
+
+// Host -udp> Multicast
+
+message HostAdvertisement {
+    // Port of the websocket server. Use the source address of this beacon packet as a fallback.
+    optional uint32 websocket_port = 1;
+    // Display name of this host (usually the device hostname)
+    optional string hostname = 2;
+}
+
+// Client -ws> Host
+
+message WsStreamRequest {
+    enum WsStream {
+        FieldGeometry = 1;
+        GameState = 2;
+        VisMappings = 3;
+    }
+
+    repeated WsStream stream = 1;
+}
+
+message UdpStreamRequest {
+    enum UdpStream {
+        WorldState = 1;
+        Visualizations = 2;
+    }
+
+    repeated UdpStream stream = 1;
+    required uint32 port = 2;
+}

@@ -8,6 +8,9 @@ rust-version.workspace = true
 bevy.workspace = true
 earcut.workspace = true
 
+bytes.workspace = true
+
+async-tungstenite.workspace = true
 async-io.workspace = true
 async-net.workspace = true
 async-channel.workspace = true

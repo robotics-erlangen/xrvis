@@ -1,14 +1,16 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
+use bevy::prelude::*;
 use bevy::render::view::NoIndirectDrawing;
-use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
 use bevy_mod_openxr::add_xr_plugins;
 use bevy_mod_openxr::exts::OxrExtensions;
 use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
 use bevy_mod_openxr::init::OxrInitPlugin;
 use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::EnvironmentBlendMode;
-use sslgame::{AvailableHosts, Field, VisSelection, ssl_game_plugin};
-use std::collections::HashSet;
+use sslgame::proto::remote::VisualizationFilter;
+use sslgame::{
+    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
+};
 
 mod interaction;
 
@@ -17,20 +19,15 @@ pub fn main() -> AppExit {
     let mut app = App::new();
 
     // XR setup
-    app.add_plugins(
-        // Disabling pipelining can improve input latency at the cost of some performance
-        add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
-            OxrInitPlugin {
-                exts: {
-                    let mut exts = OxrExtensions::default();
-                    exts.enable_fb_passthrough();
-                    exts.enable_hand_tracking();
-                    exts
-                },
-                ..default()
-            },
-        ),
-    )
+    app.add_plugins(add_xr_plugins(DefaultPlugins.build()).set(OxrInitPlugin {
+        exts: {
+            let mut exts = OxrExtensions::default();
+            exts.enable_fb_passthrough();
+            exts.enable_hand_tracking();
+            exts
+        },
+        ..default()
+    }))
     .insert_resource(OxrSessionConfig {
         blend_mode_preference: vec![
             EnvironmentBlendMode::ALPHA_BLEND,
@@ -44,11 +41,29 @@ pub fn main() -> AppExit {
 
     // App setup
     app.add_plugins(ssl_game_plugin)
-        .add_systems(Update, |mut q_fields: Query<&mut VisSelection>| {
-            for mut selection in q_fields.iter_mut() {
-                selection.selected = selection.available.keys().copied().collect::<HashSet<_>>();
-            }
-        })
+        .add_systems(
+            Update,
+            |mut q_fields: Query<
+                (&AvailableVisualizations, &mut SelectedVisualizations),
+                Changed<AvailableVisualizations>,
+            >| {
+                for (available, mut selected) in q_fields.iter_mut() {
+                    let new_filter = VisualizationFilter {
+                        allowed_vis_source: available.sources.keys().copied().collect(),
+                        allowed_vis_id: available
+                            .visualizations
+                            .iter()
+                            .filter(|(id, name)| {
+                                let name_lower = name.to_ascii_lowercase();
+                                !name_lower.contains("zone") && !name_lower.contains("obstacle")
+                            })
+                            .map(|(id, _)| *id)
+                            .collect(),
+                    };
+                    selected.set_if_neq(SelectedVisualizations(new_filter));
+                }
+            },
+        )
         .add_plugins(interaction::interaction_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
@@ -95,7 +110,11 @@ fn spawn_new_hosts(
     if let Some(new_host) = new_hosts.iter().next() {
         match q_spawned_field.as_deref() {
             // Replace the field if it is not one of the new hosts, but a different one is there to replace it
-            Some((field, entity)) if !new_hosts.iter().any(|h| field.host.addr == h.addr) => {
+            Some((field, entity))
+                if !new_hosts
+                    .iter()
+                    .any(|h| field.host.websocket_addr == h.websocket_addr) =>
+            {
                 commands.entity(*entity).despawn();
                 commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
             }

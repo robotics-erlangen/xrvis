@@ -1,0 +1,29 @@
+syntax = "proto2";
+
+package remote;
+
+import "remote_meta.proto";
+import "remote_status.proto";
+
+message WsRequest {
+    oneof content {
+        WsStreamRequest ws_stream_req = 1;
+        UdpStreamRequest udp_stream_req = 2;
+        VisualizationFilter set_vis_filter = 3;
+    }
+}
+
+message WsPacket {
+    oneof content {
+        FieldGeometry geom = 1;
+        GameState game_state = 2;
+        VisMappings vis_mappings = 3;
+    }
+}
+
+message UdpPacket {
+    oneof content {
+        WorldState world_state = 1;
+        VisualizationUpdate vis_update = 2;
+    }
+}

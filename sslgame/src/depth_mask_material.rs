@@ -5,7 +5,7 @@ use bevy::shader::ShaderRef;
 // TODO: statically include shader as a string
 const SHADER_ASSET_PATH: &str = "shaders/discard_fragment.wgsl";
 
-// This struct defines the data that will be passed to your shader
+/// Material that makes objects only show up in the depth prepass, but discards them during actual rendering.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct DepthMaskMaterial {}
 

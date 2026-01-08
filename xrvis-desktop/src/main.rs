@@ -1,14 +1,18 @@
 use bevy::prelude::*;
-use sslgame::{AvailableHosts, Field, VisSelection, ssl_game_plugin};
+use sslgame::{
+    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
+};
 /*use bevy_nokhwa::BevyNokhwaPlugin;
 use bevy_nokhwa::camera::BackgroundCamera;
 use bevy_nokhwa::nokhwa::utils::{
     ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormatType, Resolution,
 };*/
-use bevy_inspector_egui::bevy_egui::EguiPlugin;
+use bevy_inspector_egui::bevy_egui;
+use bevy_inspector_egui::bevy_egui::{EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass};
+use bevy_inspector_egui::egui;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
-use std::collections::HashSet;
+use sslgame::proto::remote::VisualizationFilter;
 
 fn main() {
     let mut app = App::new();
@@ -19,16 +23,19 @@ fn main() {
 
     // Dev plugins
     app.add_plugins(PanOrbitCameraPlugin);
+    app.insert_resource(EguiGlobalSettings {
+        enable_absorb_bevy_input_system: true,
+        ..Default::default()
+    });
     app.add_plugins(EguiPlugin::default());
     app.add_plugins(WorldInspectorPlugin::new());
+    app.add_systems(EguiPrimaryContextPass, vis_selection_ui);
 
     app.add_systems(Startup, test_init);
-    app.add_systems(Update, |mut q_fields: Query<&mut VisSelection>| {
-        for mut selection in q_fields.iter_mut() {
-            selection.selected = selection.available.keys().copied().collect::<HashSet<_>>();
-        }
-    });
-    app.add_systems(Update, spawn_new_hosts);
+    app.add_systems(
+        Update,
+        spawn_new_hosts.run_if(resource_changed::<AvailableHosts>),
+    );
 
     app.run();
 }
@@ -50,7 +57,7 @@ fn spawn_new_hosts(
     // Spawn fields for each new host in a line. Sort by address to maintain a consistent order
     // of the remaining elements after one of them has been removed.
     let mut new_hosts = available_hosts.0.iter().collect::<Vec<_>>();
-    new_hosts.sort_unstable_by_key(|h| h.addr);
+    new_hosts.sort_unstable_by_key(|h| h.websocket_addr);
     debug!("New Hosts: {:?}", new_hosts);
     new_hosts.into_iter().enumerate().for_each(|(i, new_host)| {
         let z_pos = (i * 10) as f32 - ((available_hosts.0.len() - 1) as f32 * 5.0);
@@ -59,6 +66,50 @@ fn spawn_new_hosts(
             Transform::from_xyz(0.0, 0.0, z_pos),
         ));
     });
+}
+
+fn vis_selection_ui(
+    mut contexts: bevy_egui::EguiContexts,
+    mut q_fields: Query<(
+        &Field,
+        &AvailableVisualizations,
+        &mut SelectedVisualizations,
+    )>,
+) -> Result {
+    egui::Window::new("Visualizations")
+        .scroll([false, true])
+        .collapsible(true)
+        .resizable(true)
+        .show(contexts.ctx_mut()?, |ui| {
+            for (field, available, mut selected) in q_fields.iter_mut() {
+                let field_name = field
+                    .host
+                    .hostname
+                    .clone()
+                    .unwrap_or_else(|| field.host.websocket_addr.to_string());
+                ui.label(field_name);
+
+                let mut flags: Vec<_> = available
+                    .visualizations
+                    .iter()
+                    .map(|(id, name)| (id, name, selected.0.allowed_vis_id.contains(id)))
+                    .collect();
+                flags.sort_by_key(|(_, name, _)| *name);
+                for (_, name, checked) in flags.iter_mut() {
+                    ui.checkbox(checked, *name);
+                }
+
+                selected.set_if_neq(SelectedVisualizations(VisualizationFilter {
+                    allowed_vis_source: available.sources.keys().copied().collect(),
+                    allowed_vis_id: flags
+                        .iter()
+                        .filter(|(_, _, active)| *active)
+                        .map(|(id, _, _)| **id)
+                        .collect(),
+                }));
+            }
+        });
+    Ok(())
 }
 
 fn test_init(mut commands: Commands) {

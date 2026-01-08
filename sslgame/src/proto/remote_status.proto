@@ -1,36 +1,42 @@
 syntax = "proto2";
 
-package status_streaming;
-
-message Status {
-    optional uint64 timestamp = 1;
-    optional TeamInfo yellow_team = 2;
-    optional TeamInfo blue_team = 3;
-    optional FieldGeometry field_geometry = 4;
-    optional WorldState world_state = 5;
-    repeated Visualization visualization = 6;
-    optional VisualizationGroup visualization_group = 7;
-}
-
-message TeamInfo {
-    required string name = 1;
-}
+package remote;
 
 message FieldGeometry {
     required float field_size_x = 1;
     required float field_size_y = 2;
     optional float boundary_width = 3;
-    required float defense_size_x = 4;
-    required float defense_size_y = 5;
-    required float goal_width = 6;
+    optional float defense_size_x = 4;
+    optional float defense_size_y = 5;
+    optional float goal_width = 6;
+}
+
+message GameState {
+    optional string yellow_team_name = 2;
+    optional string blue_team_name = 3;
+}
+
+// Human-readable names for the ids used in regular updates
+message VisMappings {
+    map<uint32, string> source = 1;
+    map<uint32, string> name = 2;
+}
+
+// Whitelist for visualizations, used to apply per-client filtering before sending.
+// Different id filters per source should be handled client-side.
+message VisualizationFilter {
+    repeated uint32 allowed_vis_source = 1;
+    repeated uint32 allowed_vis_id = 2;
 }
 
 // ==== World State ====
 
 message WorldState {
-    repeated Ball ball = 1;
-    repeated Robot yellow_robot = 2;
-    repeated Robot blue_robot = 3;
+    // Timestamp used for client-side state filtering and buffer time adjustments
+    optional uint64 timestamp = 1;
+    repeated Ball ball = 2;
+    repeated Robot yellow_robot = 3;
+    repeated Robot blue_robot = 4;
 }
 
 message Robot {
@@ -48,12 +54,26 @@ message Ball {
 
 // ==== Visualizations ====
 
+message VisualizationUpdate {
+    // The visualization group this update applies to. No vis group means the update includes all visualizations.
+    optional VisualizationGroup visualization_group = 1;
+    repeated VisualizationSet visualization_set = 2;
+}
+
+// An update packet with a group contains all visualizations where `vis_id % group_count == group`
 message VisualizationGroup {
     required uint32 group = 1;
     required uint32 group_count = 2;
 }
 
+message VisualizationSet {
+    // Shorthand source id. A human readable name is included in the VisMappings.
+    optional uint32 source = 1;
+    repeated Visualization visualization = 2;
+}
+
 message Visualization {
+    // Shorthand name id. A human readable name is included in the VisMappings.
     required uint32 id = 1;
     repeated VisPart part = 2;
 }

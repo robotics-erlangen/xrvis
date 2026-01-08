@@ -1,29 +1,32 @@
 pub mod proto {
-    pub mod status_streaming {
-        include!(concat!(env!("OUT_DIR"), "/status_streaming.rs"));
+    pub mod remote {
+        include!(concat!(env!("OUT_DIR"), "/remote.rs"));
     }
 }
 mod depth_mask_material;
 mod mesh_generators;
 mod network_tasks;
-mod state_filter;
+mod visualization_tracker;
+mod world_state_filter;
 
 use crate::depth_mask_material::DepthMaskMaterial;
 use crate::mesh_generators::*;
-use crate::network_tasks::host_discovery_task;
-use crate::proto::status_streaming;
-use crate::proto::status_streaming::vis_part::Geom;
-use crate::proto::status_streaming::{HostAdvertisement, Status, VisAdvertisement};
-use crate::state_filter::StateFilter;
+use crate::network_tasks::{UpdatePacket, host_discovery_task};
+use crate::proto::remote::udp_stream_request::UdpStream;
+use crate::proto::remote::vis_part::Geom;
+use crate::proto::remote::ws_stream_request::WsStream;
+use crate::proto::remote::{
+    HostAdvertisement, UdpStreamRequest, VisualizationFilter, WsStreamRequest, ws_request,
+};
+use crate::visualization_tracker::VisualizationTracker;
+use crate::world_state_filter::WorldStateFilter;
 use async_channel::{Receiver, Sender};
 use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
-use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
-use network_interface::NetworkInterface;
 use std::cmp::PartialEq;
-use std::collections::HashSet;
-use std::net::{Ipv6Addr, SocketAddrV6};
+use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 
 pub fn ssl_game_plugin(app: &mut App) {
     // Resources
@@ -70,12 +73,11 @@ pub fn ssl_game_plugin(app: &mut App) {
         (
             (
                 receive_host_advertisements,
-                receive_vis_advertisements,
                 receive_field_updates,
+                send_vis_selection,
                 handle_render_settings_change.run_if(resource_changed::<RenderSettings>),
             ),
             (
-                update_game_state,
                 update_field_geometry,
                 update_world_state,
                 update_visualizations,
@@ -92,7 +94,7 @@ pub struct AvailableHosts(pub HashSet<FieldHost>);
 
 #[derive(Resource, Debug)]
 struct HostDiscoveryTask {
-    discovery_channel: Receiver<Vec<((SocketAddrV6, Vec<NetworkInterface>), HostAdvertisement)>>,
+    discovery_channel: Receiver<Vec<(SocketAddr, HostAdvertisement)>>,
     discovery_task: Task<()>,
 }
 
@@ -149,90 +151,87 @@ struct RobotMaskMesh(Handle<Mesh>, Handle<DepthMaskMaterial>);
 #[derive(Resource, Debug)]
 struct BallMesh(Handle<Mesh>, Handle<StandardMaterial>);
 
-// ======== Field components ========
+// ======== Field connection components ========
 
 #[derive(Component, Debug)]
-#[require(GameState, FieldGeometry, VisSelection, Transform, Visibility)]
+#[require(
+    Visibility,
+    Transform,
+    FieldGeometry,
+    GameState,
+    AvailableVisualizations,
+    SelectedVisualizations,
+    WorldStateFilter,
+    VisualizationTracker
+)]
 pub struct Field {
     pub host: FieldHost,
-    update_task: FieldUpdateTask,
-    state_filter: StateFilter,
+    connection: FieldConnection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FieldHost {
+    pub websocket_addr: SocketAddr,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug)]
+struct FieldConnection {
+    sender: Sender<ws_request::Content>,
+    receiver: Receiver<UpdatePacket>,
+    io_task: Task<()>,
 }
 
 impl Field {
     pub fn bind(host: FieldHost) -> Self {
-        // The address is allocated according to https://datatracker.ietf.org/doc/html/rfc4607#section-1:
-        // FF35::8000:xxxx
-        // |  |  |    >>>> The port bound by the host for receiving data requests. This ensures that multiple hosts running on the same device don't interfere with each other.
-        // |  |  >>>> Magic number from 8000 to FFFF. Might be used to separate different services with similar protocols to this one in the future
-        // |  > Site-Local scope
-        // >>> Required for source-specific multicast addresses
-        // Hosts running on the same port on different devices may send to the same multicast group address, but their traffic can be differentiated by its source address.
-        let multicast_address = Ipv6Addr::from_bits(
-            0xFF35_0000_0000_0000_0000_0000_8000_0000 + host.addr.port() as u128,
-        );
-
-        let (state_sender, state_receiver) = async_channel::bounded(100);
-        let state_rx_task = IoTaskPool::get().spawn(network_tasks::status_rx_task(
-            state_sender,
-            multicast_address,
-            host.addr,
-            host.interfaces.clone(),
-        ));
-        let (vis_available_sender, vis_available_receiver) = async_channel::bounded(5);
-        let (vis_selected_sender, vis_selected_receiver) = async_channel::bounded(5);
-        let vis_select_task = IoTaskPool::get().spawn(network_tasks::vis_select_task(
-            vis_available_sender,
-            vis_selected_receiver,
-            multicast_address,
-            host.addr,
-            host.interfaces.clone(),
+        let (rx_sender, rx_receiver) = async_channel::bounded(100);
+        let (tx_sender, tx_receiver) = async_channel::bounded(10);
+        let state_rx_task = IoTaskPool::get().spawn(network_tasks::io_task(
+            host.websocket_addr,
+            rx_sender,
+            tx_receiver,
         ));
 
         debug!(
             "Spawned new field for host {}{}",
-            host.addr,
+            host.websocket_addr,
             host.hostname
                 .as_ref()
                 .map(|name| format!(" ({name})"))
                 .unwrap_or_default()
         );
 
+        tx_sender
+            .send_blocking(ws_request::Content::WsStreamReq(WsStreamRequest {
+                stream: vec![
+                    WsStream::FieldGeometry as i32,
+                    WsStream::GameState as i32,
+                    WsStream::VisMappings as i32,
+                ],
+            }))
+            .unwrap();
+        tx_sender
+            .send_blocking(ws_request::Content::UdpStreamReq(UdpStreamRequest {
+                stream: vec![
+                    UdpStream::WorldState as i32,
+                    UdpStream::Visualizations as i32,
+                ],
+                port: 0,
+            }))
+            .unwrap();
+
         Field {
             host,
-            update_task: FieldUpdateTask {
-                vis_available_receiver,
-                vis_selected_sender,
-                vis_select_task,
-                state_receiver,
-                state_rx_task,
+            connection: FieldConnection {
+                sender: tx_sender,
+                receiver: rx_receiver,
+                io_task: state_rx_task,
             },
-            state_filter: StateFilter::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FieldHost {
-    pub addr: SocketAddrV6,
-    pub interfaces: Vec<u32>,
-    pub hostname: Option<String>,
-}
-
-#[derive(Debug)]
-struct FieldUpdateTask {
-    vis_available_receiver: Receiver<VisAdvertisement>,
-    vis_selected_sender: Sender<Vec<u32>>,
-    vis_select_task: Task<()>,
-    state_receiver: Receiver<Status>,
-    state_rx_task: Task<()>,
-}
-
-#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
-pub struct GameState {
-    pub yellow_team: String,
-    pub blue_team: String,
-}
+// ======== Field state components ========
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct FieldGeometry {
@@ -242,36 +241,40 @@ pub struct FieldGeometry {
     pub goal_width: f32,
 }
 
-impl FieldGeometry {
-    pub fn div_a() -> Self {
-        Self {
-            play_area_size: Vec2::new(12.0, 9.0),
-            boundary_width: 0.3,
-            defense_size: Vec2::new(1.8, 3.6),
-            goal_width: 1.8,
-        }
-    }
+#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GameState {
+    pub yellow_team: String,
+    pub blue_team: String,
+}
 
-    pub fn div_b() -> Self {
-        Self {
-            play_area_size: Vec2::new(9.0, 6.0),
-            boundary_width: 0.3,
-            defense_size: Vec2::new(1.0, 2.0),
-            goal_width: 1.0,
-        }
-    }
+#[derive(Component, Debug, Default)]
+pub struct AvailableVisualizations {
+    pub sources: HashMap<u32, String>,
+    pub visualizations: HashMap<u32, String>,
+}
+
+#[derive(Component, Debug, Default, PartialEq)]
+pub struct SelectedVisualizations(pub VisualizationFilter);
+
+impl FieldGeometry {
+    const DIV_A: Self = Self {
+        play_area_size: Vec2::new(12.0, 9.0),
+        boundary_width: 0.3,
+        defense_size: Vec2::new(1.8, 3.6),
+        goal_width: 1.8,
+    };
+    const DIV_B: Self = Self {
+        play_area_size: Vec2::new(9.0, 6.0),
+        boundary_width: 0.3,
+        defense_size: Vec2::new(1.0, 2.0),
+        goal_width: 1.0,
+    };
 }
 
 impl Default for FieldGeometry {
     fn default() -> Self {
-        Self::div_a()
+        Self::DIV_A
     }
-}
-
-#[derive(Component, Debug, Default)]
-pub struct VisSelection {
-    pub available: HashMap<u32, String>,
-    pub selected: HashSet<u32>,
 }
 
 // ======== Field content components =========
@@ -307,16 +310,21 @@ fn receive_host_advertisements(
         if discovery_task.discovery_task.is_finished() {
             commands.remove_resource::<HostDiscoveryTask>();
             error!("Host discovery task stopped");
-            // New task will be started next frame
+            // A new task will be started next frame
         } else {
-            // Handle new host list if available. There should only ever be one at a time.
+            // Handle the new host list if available. There should only ever be one at a time.
             if let Ok(new_hosts) = discovery_task.discovery_channel.try_recv() {
                 let new_hosts = new_hosts
                     .into_iter()
-                    .map(|((addr, interfaces), host)| FieldHost {
-                        addr,
-                        interfaces: interfaces.iter().map(|i| i.index).collect(),
-                        hostname: host.hostname,
+                    .map(|(addr, adv)| {
+                        let mut websocket_addr = addr;
+                        if let Some(port) = adv.websocket_port {
+                            websocket_addr.set_port(port as u16);
+                        }
+                        FieldHost {
+                            websocket_addr,
+                            hostname: adv.hostname,
+                        }
                     })
                     .collect::<HashSet<_>>();
 
@@ -327,7 +335,7 @@ fn receive_host_advertisements(
             }
         }
     } else {
-        // Start new discovery task
+        // Start a new discovery task
         let (tx, rx) = async_channel::bounded(5);
         let task = IoTaskPool::get().spawn(host_discovery_task(tx));
         commands.insert_resource(HostDiscoveryTask {
@@ -338,37 +346,84 @@ fn receive_host_advertisements(
     }
 }
 
-fn receive_vis_advertisements(
+fn receive_field_updates(
     mut commands: Commands,
-    mut q_fields: Query<(&Field, &mut VisSelection, Entity)>,
+    mut q_fields: Query<(
+        &Field,
+        &mut FieldGeometry,
+        &mut GameState,
+        &mut AvailableVisualizations,
+        &mut WorldStateFilter,
+        &mut VisualizationTracker,
+        Entity,
+    )>,
 ) {
-    for (field, mut vis_selection, entity) in q_fields.iter_mut() {
-        if field.update_task.vis_select_task.is_finished() {
+    for (
+        field,
+        mut geom,
+        mut game_state,
+        mut vis_selection,
+        mut world_state,
+        mut vis_tracker,
+        entity,
+    ) in q_fields.iter_mut()
+    {
+        if field.connection.io_task.is_finished() {
+            info!(
+                "Connection to {} closed, despawning field entities",
+                field.host.websocket_addr
+            );
             commands.entity(entity).despawn();
-            return;
+            continue;
         }
-        while let Ok(new_available) = field.update_task.vis_available_receiver.try_recv() {
-            vis_selection.available.clear();
-            new_available.visualization.into_iter().for_each(|vis| {
-                vis_selection.available.insert(vis.id, vis.name);
-            });
-            _ = field
-                .update_task
-                .vis_selected_sender
-                .try_send(vis_selection.selected.iter().copied().collect());
+        while let Ok(new_packet) = field.connection.receiver.try_recv() {
+            // The host should only send geom and game state update when they actually changed, but its still safer to check ourselves
+            match new_packet {
+                UpdatePacket::FieldGeom(new_geom) => {
+                    geom.set_if_neq(FieldGeometry {
+                        play_area_size: Vec2::new(new_geom.field_size_x, new_geom.field_size_y),
+                        boundary_width: new_geom.boundary_width.unwrap_or(0.0),
+                        defense_size: Vec2::new(
+                            new_geom
+                                .defense_size_x
+                                .unwrap_or(new_geom.field_size_x / 6.),
+                            new_geom
+                                .defense_size_y
+                                .unwrap_or(new_geom.field_size_y / 3.),
+                        ),
+                        goal_width: new_geom.goal_width.unwrap_or(new_geom.field_size_y / 5.),
+                    });
+                }
+                UpdatePacket::GameState(new_game_state) => {
+                    game_state.set_if_neq(GameState {
+                        yellow_team: new_game_state.yellow_team_name.unwrap_or_default(),
+                        blue_team: new_game_state.blue_team_name.unwrap_or_default(),
+                    });
+                }
+                UpdatePacket::VisMappings(new_vis_mappings) => {
+                    vis_selection.sources = new_vis_mappings.source;
+                    vis_selection.visualizations = new_vis_mappings.name;
+                }
+                UpdatePacket::WorldState(new_world_state) => {
+                    world_state.push_packet(new_world_state);
+                }
+                UpdatePacket::VisualizationUpdate(vis_update) => {
+                    vis_tracker.push_update(vis_update);
+                }
+            }
         }
     }
 }
 
-fn receive_field_updates(mut commands: Commands, mut q_fields: Query<(&mut Field, Entity)>) {
-    for (mut field, entity) in q_fields.iter_mut() {
-        if field.update_task.state_rx_task.is_finished() {
-            commands.entity(entity).despawn();
-            return;
-        }
-        while let Ok(new_status) = field.update_task.state_receiver.try_recv() {
-            field.state_filter.push_packet(new_status);
-        }
+fn send_vis_selection(
+    q_fields: Query<(&Field, &SelectedVisualizations), Changed<SelectedVisualizations>>,
+) {
+    for (field, vis_selection) in q_fields {
+        debug!("Sending vis selection: {:?}", vis_selection.0);
+        _ = field
+            .connection
+            .sender
+            .send_blocking(ws_request::Content::SetVisFilter(vis_selection.0.clone()));
     }
 }
 
@@ -400,12 +455,6 @@ fn handle_render_settings_change(
 
 // ======== Update the world from the state filter ========
 
-fn update_game_state(mut q_fields: Query<(&Field, &mut GameState)>) {
-    for (field, mut game_state) in &mut q_fields {
-        *game_state = field.state_filter.current_game_state();
-    }
-}
-
 #[allow(clippy::type_complexity)]
 fn update_field_geometry(
     mut commands: Commands,
@@ -416,26 +465,17 @@ fn update_field_geometry(
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<Scene>>,
     ),
-    mut q_fields: Query<(
-        &Field,
-        &mut FieldGeometry,
-        Option<&FieldModelInstance>,
-        Entity,
-    )>,
+    mut q_fields: Query<(Ref<FieldGeometry>, Option<&FieldModelInstance>, Entity)>,
 ) {
-    for (field, mut field_geometry, modes_instance, entity) in &mut q_fields {
-        let new_field_geom = field.state_filter.current_field_geometry();
-
-        if render_settings.field && (*field_geometry != new_field_geom || modes_instance.is_none())
-        {
-            if let Some(instance) = modes_instance {
+    for (field_geometry, model_instance, entity) in &mut q_fields {
+        if render_settings.field && (field_geometry.is_changed() || model_instance.is_none()) {
+            if let Some(instance) = model_instance {
                 scene_spawner.despawn_instance(instance.0);
             }
-            let field_model = field_mesh(&new_field_geom, &mut mesh_assets, &mut material_assets);
+            let field_model = field_mesh(&field_geometry, &mut mesh_assets, &mut material_assets);
             commands.entity(entity).insert(FieldModelInstance(
                 scene_spawner.spawn_as_child(scene_assets.add(field_model), entity),
             ));
-            *field_geometry = new_field_geom;
         }
     }
 }
@@ -447,13 +487,13 @@ fn update_world_state(
     asset_server: Res<AssetServer>,
     (ball_mesh, robot_mask_mesh): (Res<BallMesh>, Res<RobotMaskMesh>),
     (q_fields, mut q_robots, q_balls): (
-        Query<(&Field, Entity)>,
+        Query<(&WorldStateFilter, Entity)>,
         Query<(&Robot, &Team, &mut Transform, &ChildOf, Entity)>,
         Query<(&Transform, &ChildOf, Entity), (With<Ball>, Without<Robot>)>,
     ),
 ) {
-    for (field, field_entity) in &q_fields {
-        let world_state = field.state_filter.current_world_state(true);
+    for (world_state_filter, field_entity) in &q_fields {
+        let world_state = world_state_filter.current_world_state(false);
 
         // TODO: Correlate new to old balls and move them instead of recreating everything. Don't forget to update handle_render_settings_change
         // Despawn old balls
@@ -487,7 +527,7 @@ fn update_world_state(
             .filter(|(_, _, _, c, _)| c.parent() == field_entity)
             .collect::<Vec<_>>();
 
-        let mut update_robots = |team: Team, new_robots: Vec<status_streaming::Robot>| {
+        let mut update_robots = |team: Team, new_robots: Vec<proto::remote::Robot>| {
             for robot_update in new_robots {
                 let leftover_index = leftover_robots
                     .iter()
@@ -559,13 +599,12 @@ fn update_visualizations(
         ResMut<Assets<StandardMaterial>>,
     ),
     (q_fields, q_visualizations): (
-        Query<(&Field, &VisSelection, Entity)>,
+        Query<(&VisualizationTracker, &AvailableVisualizations, Entity)>,
         Query<(&Visualization, &ChildOf, Entity)>,
     ),
 ) {
-    for (field, vis_names, field_entity) in &q_fields {
-        let (group_count, updated_groups, new_visualizations) =
-            field.state_filter.visualization_updates();
+    for (vis_tracker, vis_names, field_entity) in &q_fields {
+        let (group_count, updated_groups, new_visualizations) = vis_tracker.visualization_updates();
 
         // Despawn old visualization meshes
         q_visualizations
@@ -655,7 +694,7 @@ fn update_visualizations(
                             warn!(
                                 "Invalid visualization part in {}: No geometry",
                                 vis_names
-                                    .available
+                                    .visualizations
                                     .get(&visualization.id)
                                     .unwrap_or(&visualization.id.to_string())
                             );
@@ -665,7 +704,7 @@ fn update_visualizations(
                             warn!(
                                 "Invalid visualization part in {}: Empty geometry",
                                 vis_names
-                                    .available
+                                    .visualizations
                                     .get(&visualization.id)
                                     .unwrap_or(&visualization.id.to_string())
                             );
@@ -683,7 +722,7 @@ fn update_visualizations(
             }
         }
 
-        // Forget unused meshes that were unloaded by the bevy asset system
+        // Forget unused meshes that were unloaded by the bevy asset system TODO: Fix this
         vis_models
             .circle
             .retain(|_, asset_id| mesh_assets.contains(asset_id));
