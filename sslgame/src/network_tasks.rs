@@ -25,13 +25,19 @@ const BEACON_ADDR_V6: SocketAddrV6 = SocketAddrV6::new(
     0,
 );
 
+#[derive(PartialEq, Eq, Hash)]
+enum HostKey {
+    Addr(SocketAddr),
+    Id(u32),
+}
+
 pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertisement)>>) {
     let socket_v4 = UdpSocket::bind_multicast((Ipv4Addr::UNSPECIFIED, BEACON_ADDR_V4.port()))
         .expect("Failed to bind ipv4 discovery socket");
     let socket_v6 = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, BEACON_ADDR_V6.port()))
         .expect("Failed to bind ipv6 discovery socket");
 
-    let mut host_map: HashMap<_, (_, _)> = HashMap::new();
+    let mut host_map: HashMap<_, (_, _, _)> = HashMap::new();
 
     // Forward discovery packets and check for new network interfaces every 3 seconds
     let mut active_interfaces = Vec::new();
@@ -41,7 +47,7 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
         // Forget old hosts
         {
             let cutoff = Instant::now() - Duration::from_secs(3);
-            host_map.retain(|_, (t, _)| *t > cutoff);
+            host_map.retain(|_, (t, _, _)| *t > cutoff);
         }
 
         // ======== Update multicast subscriptions ========
@@ -120,15 +126,26 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
                         }
                     };
 
-                    match host_map.entry(source_addr) {
-                        Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
-                        Entry::Vacant(entry) => {
-                            entry.insert((Instant::now(), new_host));
+                    if let Some(instance_id) = new_host.instance_id {
+                        match host_map.entry(HostKey::Id(instance_id)) {
+                            Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
+                            Entry::Vacant(entry) => {
+                                entry.insert((Instant::now(), source_addr, new_host));
+                            }
+                        }
+                    } else {
+                        match host_map.entry(HostKey::Addr(source_addr)) {
+                            Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
+                            Entry::Vacant(entry) => {
+                                entry.insert((Instant::now(), source_addr, new_host));
+                            }
                         }
                     }
 
-                    let host_list: Vec<_> =
-                        host_map.iter().map(|(a, (_, h))| (*a, h.clone())).collect();
+                    let host_list: Vec<_> = host_map
+                        .iter()
+                        .map(|(_, (_, a, h))| (*a, h.clone()))
+                        .collect();
 
                     match hosts_out.try_send(host_list) {
                         Ok(_) => {}

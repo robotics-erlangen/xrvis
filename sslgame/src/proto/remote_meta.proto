@@ -5,10 +5,11 @@ package remote;
 // Host -udp> Multicast
 
 message HostAdvertisement {
-    // Port of the websocket server. Use the source address of this beacon packet as a fallback.
-    optional uint32 websocket_port = 1;
+    required uint32 websocket_port = 1;
     // Display name of this host (usually the device hostname)
     optional string hostname = 2;
+    // Random per-instance id to allow clients to recognise hosts across multiple network interfaces.
+    optional uint32 instance_id = 3;
 }
 
 // Client -ws> Host

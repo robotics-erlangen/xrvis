@@ -318,9 +318,7 @@ fn receive_host_advertisements(
                     .into_iter()
                     .map(|(addr, adv)| {
                         let mut websocket_addr = addr;
-                        if let Some(port) = adv.websocket_port {
-                            websocket_addr.set_port(port as u16);
-                        }
+                        websocket_addr.set_port(adv.websocket_port as u16);
                         FieldHost {
                             websocket_addr,
                             hostname: adv.hostname,
