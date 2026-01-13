@@ -39,6 +39,7 @@ androidComponents.onVariants { variant ->
 }
 
 // Load signing properties from an uncommitted properties file
+val keystoreFile = rootProject.file("keystore.jks")
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
 keystoreProperties.load(FileInputStream(keystorePropertiesFile))
@@ -62,8 +63,16 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = rootProject.file("keystore.jks")
+        create("optional") {
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+        create("required") {
+            storeFile = keystoreFile
             storePassword = keystoreProperties["storePassword"] as String
             keyAlias = keystoreProperties["keyAlias"] as String
             keyPassword = keystoreProperties["keyPassword"] as String
@@ -74,11 +83,13 @@ android {
         debug {
             isDebuggable = true
             isJniDebuggable = true
+            // Also sign debug builds where possible to make switching between debug and release builds easier
+            signingConfig = signingConfigs.getByName("optional")
         }
         release {
             isDebuggable = false
             isJniDebuggable = false
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("required")
         }
     }
 
