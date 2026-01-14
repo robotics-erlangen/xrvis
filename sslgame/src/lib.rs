@@ -581,10 +581,9 @@ fn update_world_state(
 
 #[derive(Default)]
 pub struct VisualizationModels {
-    // TODO: Replace with AssetId (weak handle)
-    pub circle: HashMap<u32, Handle<Mesh>>,
-    pub polygon: HashMap<Vec<(i32, i32)>, Handle<Mesh>>,
-    pub path: HashMap<Vec<(i32, i32)>, Handle<Mesh>>,
+    pub circle: HashMap<u32, AssetId<Mesh>>,
+    pub polygon: HashMap<Vec<(i32, i32)>, AssetId<Mesh>>,
+    pub path: HashMap<Vec<(i32, i32)>, AssetId<Mesh>>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -615,6 +614,19 @@ fn update_visualizations(
                 }
             });
 
+        // Forget unused meshes that were unloaded by the bevy asset system
+        // This does not affect the entities that were just despawned because that
+        // command is deferred to the end of the system run.
+        vis_models
+            .circle
+            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
+        vis_models
+            .polygon
+            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
+        vis_models
+            .path
+            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
+
         if render_settings.visualizations {
             // Generate and Spawn new visualization meshes
             for visualization in new_visualizations {
@@ -633,11 +645,14 @@ fn update_visualizations(
                             // Convert to integers to get more stable hashing
                             let mm_radius = (c.radius * 1000.0) as u32;
                             if let Some(handle) = vis_models.circle.get(&mm_radius) {
-                                (handle.clone(), Vec2::new(c.p_x, c.p_y))
+                                (
+                                    mesh_assets.get_strong_handle(*handle).unwrap(),
+                                    Vec2::new(c.p_x, c.p_y),
+                                )
                             } else {
                                 let new_handle =
                                     mesh_assets.add(circle_visualization_mesh(32, c.radius));
-                                vis_models.circle.insert(mm_radius, new_handle.clone());
+                                vis_models.circle.insert(mm_radius, new_handle.id());
                                 (new_handle, Vec2::new(c.p_x, c.p_y))
                             }
                         }
@@ -657,11 +672,11 @@ fn update_visualizations(
                                 })
                                 .collect::<Vec<_>>();
                             if let Some(handle) = vis_models.polygon.get(&mm_points) {
-                                (handle.clone(), s)
+                                (mesh_assets.get_strong_handle(*handle).unwrap(), s)
                             } else {
                                 let new_handle =
                                     mesh_assets.add(polygon_visualization_mesh(&points));
-                                vis_models.polygon.insert(mm_points, new_handle.clone());
+                                vis_models.polygon.insert(mm_points, new_handle.id());
                                 (new_handle, s)
                             }
                         }
@@ -679,12 +694,12 @@ fn update_visualizations(
                                     (((p.x - s.x) * 1000.0) as i32, ((p.y - s.y) * 1000.0) as i32)
                                 })
                                 .collect::<Vec<_>>();
-                            if let Some(handle) = vis_models.path.get(&mm_points) {
-                                (handle.clone(), s)
+                            if let Some(asset_id) = vis_models.path.get(&mm_points) {
+                                (mesh_assets.get_strong_handle(*asset_id).unwrap(), s)
                             } else {
                                 let new_handle =
                                     mesh_assets.add(path_visualization_mesh(&points, 0.01));
-                                vis_models.path.insert(mm_points, new_handle.clone());
+                                vis_models.path.insert(mm_points, new_handle.id());
                                 (new_handle, s)
                             }
                         }
@@ -719,16 +734,5 @@ fn update_visualizations(
                 }
             }
         }
-
-        // Forget unused meshes that were unloaded by the bevy asset system TODO: Fix this
-        vis_models
-            .circle
-            .retain(|_, asset_id| mesh_assets.contains(asset_id));
-        vis_models
-            .polygon
-            .retain(|_, asset_id| mesh_assets.contains(asset_id));
-        vis_models
-            .path
-            .retain(|_, asset_id| mesh_assets.contains(asset_id));
     }
 }
