@@ -595,13 +595,17 @@ fn update_visualizations(
         ResMut<Assets<Mesh>>,
         ResMut<Assets<StandardMaterial>>,
     ),
-    (q_fields, q_visualizations): (
-        Query<(&VisualizationTracker, &AvailableVisualizations, Entity)>,
+    (mut q_fields, q_visualizations): (
+        Query<(&mut VisualizationTracker, &AvailableVisualizations, Entity)>,
         Query<(&Visualization, &ChildOf, Entity)>,
     ),
 ) {
-    for (vis_tracker, vis_names, field_entity) in &q_fields {
+    for (mut vis_tracker, vis_names, field_entity) in &mut q_fields {
         let (group_count, updated_groups, new_visualizations) = vis_tracker.visualization_updates();
+        // No new visualizations -> skip field
+        if new_visualizations.is_empty() {
+            continue;
+        }
 
         // Despawn old visualization meshes
         q_visualizations

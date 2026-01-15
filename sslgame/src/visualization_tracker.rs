@@ -10,7 +10,14 @@ pub struct VisualizationTracker {
 
 impl VisualizationTracker {
     // TODO: Filter in case the host doesn't properly handle filters server-side
-    pub fn visualization_updates(&self) -> (u32, HashSet<u32>, Vec<Visualization>) {
+    /// Collects all updated visualization since the last call
+    /// and some information about which groups are affected.
+    /// (group_count, updated_groups, new_visualizations)
+    pub fn visualization_updates(&mut self) -> (u32, HashSet<u32>, Vec<Visualization>) {
+        if self.history.is_empty() {
+            return Default::default();
+        }
+
         let group_count = self
             .history
             .front()
@@ -46,6 +53,9 @@ impl VisualizationTracker {
                 }
             });
 
+        // Clear the history so that each update is only returned once
+        self.history.clear();
+
         (
             group_count,
             group_sources.keys().copied().collect(),
@@ -53,24 +63,25 @@ impl VisualizationTracker {
         )
     }
 
-    pub fn push_update(&mut self, mut update: VisualizationUpdate) {
-        remap_visualizations(&mut update);
+    pub fn push_update(&mut self, mut new_update: VisualizationUpdate) {
+        remap_visualizations(&mut new_update);
 
-        let new_group_count = update
+        let new_group_count = new_update
             .visualization_group
             .map(|g| g.group_count)
             .unwrap_or(1);
 
-        self.history.push_front(update);
+        self.history.push_front(new_update);
 
-        // Truncate so that each group is contained at least once
+        // Truncate so that each group in the current group range is contained at least once
         let mut seen_groups = HashSet::new();
         let mut truncate_at = None;
 
         for (i, update) in self.history.iter().enumerate() {
             if let Some(group) = update.visualization_group {
-                seen_groups.insert(group.group);
-                if group.group_count != new_group_count {
+                if new_group_count == group.group_count {
+                    seen_groups.insert(group.group);
+                } else {
                     truncate_at = Some(i);
                     break;
                 }
