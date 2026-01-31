@@ -9,6 +9,7 @@ bevy.workspace = true
 earcut.workspace = true
 
 bytes.workspace = true
+tracing.workspace = true
 
 async-tungstenite.workspace = true
 async-io.workspace = true

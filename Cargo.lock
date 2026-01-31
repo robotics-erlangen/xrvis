@@ -4951,6 +4951,7 @@ dependencies = [
  "network-interface",
  "prost",
  "prost-build",
+ "tracing",
 ]
 
 [[package]]

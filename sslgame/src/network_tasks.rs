@@ -194,6 +194,7 @@ impl From<udp_packet::Content> for UpdatePacket {
     }
 }
 
+#[tracing::instrument(skip(packets_out, requests_in))]
 pub async fn io_task(
     host: SocketAddr,
     packets_out: Sender<UpdatePacket>,
@@ -243,7 +244,7 @@ pub async fn io_task(
 
         match message {
             tungstenite::Message::Text(_) => {
-                debug!("Received unexpected text message from {host}");
+                debug!("Received unexpected text message");
                 Ok(StreamEvent::None)
             }
             tungstenite::Message::Binary(bytes) => {
@@ -260,7 +261,7 @@ pub async fn io_task(
                 Ok(StreamEvent::None)
             }
             tungstenite::Message::Pong(_) => {
-                debug!("Received unexpected pong message from {host}. The server should be the one *initiating* pings.");
+                debug!("Received unexpected pong message. The server should be the one *initiating* pings.");
                 Ok(StreamEvent::None)
             }
             tungstenite::Message::Close(_) => {
@@ -305,13 +306,13 @@ pub async fn io_task(
         Ok(_) => true,
         Err(TrySendError::Full(_)) => {
             if warn_cooldown < Instant::now() {
-                warn!("Status rx channel for {host} full (system can't keep up)");
+                warn!("Status rx channel full (system can't keep up)");
                 warn_cooldown = Instant::now() + Duration::from_secs(5);
             }
             true
         }
         Err(TrySendError::Closed(_)) => {
-            debug!("Packet receiver for {host} dropped, stopping io task");
+            debug!("Packet receiver dropped, stopping io task");
             false
         }
     };
@@ -366,5 +367,5 @@ pub async fn io_task(
         }
     }
 
-    info!("Connection to {host} timed out");
+    info!("Connection to timed out");
 }
