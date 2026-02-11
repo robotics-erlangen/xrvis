@@ -71,7 +71,7 @@ pub fn main() -> AppExit {
             Update,
             spawn_new_hosts.run_if(resource_changed::<AvailableHosts>),
         )
-        .insert_resource(AmbientLight {
+        .insert_resource(GlobalAmbientLight {
             color: Default::default(),
             brightness: 500.0,
             affects_lightmapped_meshes: false,

@@ -500,7 +500,7 @@ fn update_world_state(
             .map(|(_, c, e)| (c.parent(), e))
             .filter(|(p, _)| *p == field_entity)
             .for_each(|(_, e)| {
-                commands.entity(field_entity).remove_children(&[e]);
+                commands.entity(field_entity).detach_child(e);
                 commands.entity(e).despawn()
             });
 
@@ -573,7 +573,7 @@ fn update_world_state(
 
         // Despawn all remaining robots
         leftover_robots.into_iter().for_each(|(_, _, _, _, e)| {
-            commands.entity(field_entity).remove_children(&[e]);
+            commands.entity(field_entity).detach_child(e);
             commands.entity(e).despawn()
         });
     }
