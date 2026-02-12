@@ -13,7 +13,6 @@ use crate::depth_mask_material::DepthMaskMaterial;
 use crate::mesh_generators::*;
 use crate::network_tasks::{UpdatePacket, host_discovery_task};
 use crate::proto::remote::udp_stream_request::UdpStream;
-use crate::proto::remote::vis_part::Geom;
 use crate::proto::remote::ws_stream_request::WsStream;
 use crate::proto::remote::{
     HostAdvertisement, UdpStreamRequest, VisualizationFilter, WsStreamRequest, ws_request,
@@ -39,31 +38,38 @@ pub fn ssl_game_plugin(app: &mut App) {
 
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
 
-    let robot_mask_mesh = app
-        .world_mut()
-        .resource_mut::<Assets<Mesh>>()
-        .add(MeshBuilder::build(
-            &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
-        ));
-    let robot_mask_material = app
-        .world_mut()
+    let world = app.world_mut();
+
+    // Meshes
+    let mut meshes = world.resource_mut::<Assets<Mesh>>();
+    let robot_mask_mesh = meshes.add(MeshBuilder::build(
+        &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
+    ));
+    // FIXME: Ball in the ground
+    let ball_mesh = meshes.add(MeshBuilder::build(&SphereMeshBuilder::new(
+        0.0215,
+        SphereKind::Ico { subdivisions: 3 },
+    )));
+
+    // Materials
+    let robot_mask_material = world
         .resource_mut::<Assets<DepthMaskMaterial>>()
         .add(DepthMaskMaterial {});
-    app.insert_resource(RobotMaskMesh(robot_mask_mesh, robot_mask_material));
+    let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
+    let ball_material = materials.add(StandardMaterial::from_color(Color::srgb_u8(255, 136, 0)));
+    let white_mat_opaque = materials.add(StandardMaterial::from_color(Color::WHITE));
+    let white_mat_translucent = materials.add({
+        let mut tmp = StandardMaterial::from_color(Color::WHITE);
+        tmp.alpha_mode = AlphaMode::Blend;
+        tmp
+    });
 
-    // FIXME: Ball in the ground
-    let ball_mesh = app
-        .world_mut()
-        .resource_mut::<Assets<Mesh>>()
-        .add(MeshBuilder::build(&SphereMeshBuilder::new(
-            0.0215,
-            SphereKind::Ico { subdivisions: 3 },
-        )));
-    let ball_material = app
-        .world_mut()
-        .resource_mut::<Assets<StandardMaterial>>()
-        .add(StandardMaterial::from_color(Color::srgb_u8(255, 136, 0)));
+    app.insert_resource(RobotMaskMesh(robot_mask_mesh, robot_mask_material));
     app.insert_resource(BallMesh(ball_mesh, ball_material));
+    app.insert_resource(DefaultMaterial {
+        opaque: white_mat_opaque,
+        translucent: white_mat_translucent,
+    });
 
     app.insert_resource(AvailableHosts::default());
 
@@ -150,6 +156,12 @@ struct RobotMaskMesh(Handle<Mesh>, Handle<DepthMaskMaterial>);
 
 #[derive(Resource, Debug)]
 struct BallMesh(Handle<Mesh>, Handle<StandardMaterial>);
+
+#[derive(Resource, Debug)]
+struct DefaultMaterial {
+    pub opaque: Handle<StandardMaterial>,
+    pub translucent: Handle<StandardMaterial>,
+}
 
 // ======== Field connection components ========
 
@@ -425,27 +437,22 @@ fn send_vis_selection(
     }
 }
 
-#[derive(Component)]
-pub struct FieldModelInstance(bevy::scene::InstanceId);
-
 #[allow(clippy::type_complexity)]
 fn handle_render_settings_change(
     mut commands: Commands,
-    mut scene_spawner: ResMut<SceneSpawner>,
     render_settings: Res<RenderSettings>,
     (q_fields, q_robots, _q_balls): (
-        Query<(&FieldModelInstance, Entity)>,
+        Query<Entity, (With<Field>, With<Mesh3d>)>,
         Query<Entity, With<Robot>>,
         Query<Entity, With<Ball>>,
     ),
 ) {
     // Remove all potentially outdated entities. They will be recreated automatically.
-    // Does not affect visualizations and balls, as they get regenerated every frame anyways.
+    // Does not affect visualizations and balls, as they get regenerated periodically anyways.
     if !render_settings.field {
         // The field entity is also used as a marker for data processing, so only the model is removed
-        for (instance, field_entity) in q_fields {
-            scene_spawner.despawn_instance(instance.0);
-            _ = commands.entity(field_entity).remove::<FieldModelInstance>();
+        for field_entity in q_fields {
+            commands.entity(field_entity).remove::<Mesh3d>();
         }
     }
     q_robots.iter().for_each(|e| commands.entity(e).despawn());
@@ -456,23 +463,16 @@ fn handle_render_settings_change(
 #[allow(clippy::type_complexity)]
 fn update_field_geometry(
     mut commands: Commands,
-    mut scene_spawner: ResMut<SceneSpawner>,
     render_settings: Res<RenderSettings>,
-    (mut mesh_assets, mut material_assets, mut scene_assets): (
-        ResMut<Assets<Mesh>>,
-        ResMut<Assets<StandardMaterial>>,
-        ResMut<Assets<Scene>>,
-    ),
-    mut q_fields: Query<(Ref<FieldGeometry>, Option<&FieldModelInstance>, Entity)>,
+    white_material: Res<DefaultMaterial>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
+    mut q_fields: Query<(Ref<FieldGeometry>, Option<&Mesh3d>, Entity)>,
 ) {
-    for (field_geometry, model_instance, entity) in &mut q_fields {
-        if render_settings.field && (field_geometry.is_changed() || model_instance.is_none()) {
-            if let Some(instance) = model_instance {
-                scene_spawner.despawn_instance(instance.0);
-            }
-            let field_model = field_mesh(&field_geometry, &mut mesh_assets, &mut material_assets);
-            commands.entity(entity).insert(FieldModelInstance(
-                scene_spawner.spawn_as_child(scene_assets.add(field_model), entity),
+    for (field_geometry, mesh_component, entity) in &mut q_fields {
+        if render_settings.field && (field_geometry.is_changed() || mesh_component.is_none()) {
+            commands.entity(entity).insert((
+                Mesh3d(mesh_assets.add(field_mesh(&field_geometry))),
+                MeshMaterial3d(white_material.opaque.clone()),
             ));
         }
     }
@@ -579,22 +579,12 @@ fn update_world_state(
     }
 }
 
-#[derive(Default)]
-pub struct VisualizationModels {
-    pub circle: HashMap<u32, AssetId<Mesh>>,
-    pub polygon: HashMap<Vec<(i32, i32)>, AssetId<Mesh>>,
-    pub path: HashMap<Vec<(i32, i32)>, AssetId<Mesh>>,
-}
-
 #[allow(clippy::type_complexity)]
 fn update_visualizations(
     mut commands: Commands,
-    mut vis_models: Local<VisualizationModels>,
     render_settings: Res<RenderSettings>,
-    (mut mesh_assets, mut material_assets): (
-        ResMut<Assets<Mesh>>,
-        ResMut<Assets<StandardMaterial>>,
-    ),
+    material: Res<DefaultMaterial>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
     (mut q_fields, q_visualizations): (
         Query<(&mut VisualizationTracker, &AvailableVisualizations, Entity)>,
         Query<(&Visualization, &ChildOf, Entity)>,
@@ -618,124 +608,19 @@ fn update_visualizations(
                 }
             });
 
-        // Forget unused meshes that were unloaded by the bevy asset system
-        // This does not affect the entities that were just despawned because that
-        // command is deferred to the end of the system run.
-        vis_models
-            .circle
-            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
-        vis_models
-            .polygon
-            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
-        vis_models
-            .path
-            .retain(|_, asset_id| mesh_assets.contains(*asset_id));
-
         if render_settings.visualizations {
             // Generate and Spawn new visualization meshes
             for visualization in new_visualizations {
-                for part in &visualization.part {
-                    let border_color = part.border_style.and_then(|s| s.color).map_or(
-                        Color::srgba_u8(0, 0, 0, 255),
-                        |c| {
-                            Color::srgba_u8(c.red as u8, c.green as u8, c.blue as u8, c.alpha as u8)
-                        },
-                    );
+                let vis_id = visualization.id;
+                let vis_mesh =
+                    mesh_assets.add(visualization_mesh(&[visualization], Some(vis_names)));
 
-                    let mat = StandardMaterial::from(border_color);
-
-                    let (mesh, pos) = match part.geom.as_ref() {
-                        Some(Geom::Circle(c)) => {
-                            // Convert to integers to get more stable hashing
-                            let mm_radius = (c.radius * 1000.0) as u32;
-                            if let Some(handle) = vis_models.circle.get(&mm_radius) {
-                                (
-                                    mesh_assets.get_strong_handle(*handle).unwrap(),
-                                    Vec2::new(c.p_x, c.p_y),
-                                )
-                            } else {
-                                let new_handle =
-                                    mesh_assets.add(circle_visualization_mesh(32, c.radius));
-                                vis_models.circle.insert(mm_radius, new_handle.id());
-                                (new_handle, Vec2::new(c.p_x, c.p_y))
-                            }
-                        }
-                        Some(Geom::Polygon(poly)) if !poly.point.is_empty() => {
-                            let s = Vec2::new(poly.point[0].x, poly.point[0].y);
-                            let points = poly
-                                .point
-                                .iter()
-                                .map(|p| Vec2::new(p.x - s.x, p.y - s.y))
-                                .collect::<Vec<_>>();
-                            // Convert to integers to get more stable hashing
-                            let mm_points = poly
-                                .point
-                                .iter()
-                                .map(|p| {
-                                    (((p.x - s.x) * 1000.0) as i32, ((p.y - s.y) * 1000.0) as i32)
-                                })
-                                .collect::<Vec<_>>();
-                            if let Some(handle) = vis_models.polygon.get(&mm_points) {
-                                (mesh_assets.get_strong_handle(*handle).unwrap(), s)
-                            } else {
-                                let new_handle =
-                                    mesh_assets.add(polygon_visualization_mesh(&points));
-                                vis_models.polygon.insert(mm_points, new_handle.id());
-                                (new_handle, s)
-                            }
-                        }
-                        Some(Geom::Path(path)) if !path.point.is_empty() => {
-                            let s = Vec2::new(path.point[0].x, path.point[0].y);
-                            let points = path
-                                .point
-                                .iter()
-                                .map(|p| Vec2::new(p.x - s.x, p.y - s.y))
-                                .collect::<Vec<_>>();
-                            // Convert to integers to get more stable hashing
-                            let mm_points = points
-                                .iter()
-                                .map(|p| {
-                                    (((p.x - s.x) * 1000.0) as i32, ((p.y - s.y) * 1000.0) as i32)
-                                })
-                                .collect::<Vec<_>>();
-                            if let Some(asset_id) = vis_models.path.get(&mm_points) {
-                                (mesh_assets.get_strong_handle(*asset_id).unwrap(), s)
-                            } else {
-                                let new_handle =
-                                    mesh_assets.add(path_visualization_mesh(&points, 0.01));
-                                vis_models.path.insert(mm_points, new_handle.id());
-                                (new_handle, s)
-                            }
-                        }
-                        None => {
-                            warn!(
-                                "Invalid visualization part in {}: No geometry",
-                                vis_names
-                                    .visualizations
-                                    .get(&visualization.id)
-                                    .unwrap_or(&visualization.id.to_string())
-                            );
-                            continue;
-                        }
-                        _ => {
-                            warn!(
-                                "Invalid visualization part in {}: Empty geometry",
-                                vis_names
-                                    .visualizations
-                                    .get(&visualization.id)
-                                    .unwrap_or(&visualization.id.to_string())
-                            );
-                            continue;
-                        }
-                    };
-
-                    commands.entity(field_entity).with_child((
-                        Visualization(visualization.id),
-                        Transform::from_xyz(pos.x, 0.001, pos.y),
-                        Mesh3d(mesh),
-                        MeshMaterial3d(material_assets.add(mat)),
-                    ));
-                }
+                commands.entity(field_entity).with_child((
+                    Visualization(vis_id),
+                    Transform::default(),
+                    Mesh3d(vis_mesh),
+                    MeshMaterial3d(material.translucent.clone()),
+                ));
             }
         }
     }

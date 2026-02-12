@@ -1,12 +1,14 @@
-use crate::FieldGeometry;
-use bevy::asset::{Assets, RenderAssetUsages};
+use crate::proto::remote::Visualization;
+use crate::proto::remote::vis_part::Geom;
+use crate::{AvailableVisualizations, FieldGeometry};
+use bevy::asset::RenderAssetUsages;
 use bevy::color::Color;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec3;
 use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
-use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::*;
 use earcut::Earcut;
 use std::f32::consts::PI;
+use std::iter;
 
 /// A builder for constructing 3D meshes programmatically.
 ///
@@ -35,7 +37,8 @@ use std::f32::consts::PI;
 ///     .build(false);
 /// ```
 struct CustomMeshBuilder {
-    vertices: Vec<[f32; 3]>,
+    positions: Vec<[f32; 3]>,
+    colors: Vec<[f32; 4]>,
     indices: Vec<u32>,
     last_operation: usize,
     free_vertices: usize,
@@ -45,7 +48,8 @@ struct CustomMeshBuilder {
 impl CustomMeshBuilder {
     fn new() -> Self {
         Self {
-            vertices: Vec::new(),
+            positions: Vec::new(),
+            colors: Vec::new(),
             indices: Vec::new(),
             last_operation: 0,
             free_vertices: 0,
@@ -54,12 +58,12 @@ impl CustomMeshBuilder {
 
     // Not using bevy's MeshBuilder trait because taking ownership makes sense here
     fn build(self, double_sided: bool) -> Mesh {
-        let mut normals = vec![Vec3::ZERO; self.vertices.len()];
+        let mut normals = vec![Vec3::ZERO; self.positions.len()];
 
         self.indices.chunks(3).for_each(|tri| {
-            let a = Vec3::from_array(self.vertices[tri[0] as usize]);
-            let b = Vec3::from_array(self.vertices[tri[1] as usize]);
-            let c = Vec3::from_array(self.vertices[tri[2] as usize]);
+            let a = Vec3::from_array(self.positions[tri[0] as usize]);
+            let b = Vec3::from_array(self.positions[tri[1] as usize]);
+            let c = Vec3::from_array(self.positions[tri[2] as usize]);
             let normal = (b - a).cross(c - a);
             normals[tri[0] as usize] += normal;
             normals[tri[1] as usize] += normal;
@@ -107,25 +111,33 @@ impl CustomMeshBuilder {
         .with_inserted_indices(indices)
         .with_inserted_attribute(
             Mesh::ATTRIBUTE_POSITION,
-            VertexAttributeValues::Float32x3(self.vertices),
+            VertexAttributeValues::Float32x3(self.positions),
         )
         .with_inserted_attribute(
             Mesh::ATTRIBUTE_NORMAL,
             VertexAttributeValues::Float32x3(normals.into_iter().map(|n| n.to_array()).collect()),
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            VertexAttributeValues::Float32x4(self.colors),
         )
     }
 
     /// Insert raw vertex data without creating a new face. Mostly used as a starting point for [`Self::quad_loft`].
     ///
     /// The inserted vertices will be selected.
-    fn insert_vertices(&mut self, vertices: impl IntoIterator<Item = [f32; 3]>) {
-        let prev_len = self.vertices.len();
-        self.vertices.extend(vertices);
-        self.last_operation = self.vertices.len() - prev_len;
-        self.free_vertices += self.last_operation;
+    fn insert_vertices(&mut self, vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>) {
+        let (positions, colors): (Vec<_>, Vec<_>) = vertices.into_iter().unzip();
+
+        let count = positions.len();
+        self.positions.extend(positions);
+        self.colors.extend(colors);
+
+        self.last_operation = count;
+        self.free_vertices += count;
     }
     /// Chainable version of [`Self::insert_vertices`].
-    fn with_vertices(mut self, vertices: impl IntoIterator<Item = [f32; 3]>) -> Self {
+    fn with_vertices(mut self, vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>) -> Self {
         self.insert_vertices(vertices);
         self
     }
@@ -136,16 +148,18 @@ impl CustomMeshBuilder {
     /// The used vertices will stay selected.
     fn close_hole(&mut self, flat_shading: bool) {
         if flat_shading {
-            self.vertices
-                .extend_from_within((self.vertices.len() - self.last_operation)..);
+            self.positions
+                .extend_from_within((self.positions.len() - self.last_operation)..);
+            self.colors
+                .extend_from_within((self.colors.len() - self.last_operation)..);
         }
 
-        let start_index = self.vertices.len() - self.last_operation;
+        let start_index = self.positions.len() - self.last_operation;
 
         let mut vert_2d = Vec::new();
         earcut::utils3d::project3d_to_2d(
-            &self.vertices[start_index..],
-            self.vertices.len() - start_index,
+            &self.positions[start_index..],
+            self.positions.len() - start_index,
             &mut vert_2d,
         );
         let mut indices_out: Vec<u32> = Vec::new();
@@ -184,23 +198,27 @@ impl CustomMeshBuilder {
     /// If fewer than three vertices are given, they are still added to the mesh, but no face is created.
     ///
     /// The newly inserted vertices will be selected.
-    fn insert_convex_polygon(&mut self, vertices: impl IntoIterator<Item = [f32; 3]>) {
-        let vertices = vertices.into_iter().collect::<Vec<_>>();
+    fn insert_convex_polygon(&mut self, vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>) {
+        let (positions, colors): (Vec<_>, Vec<_>) = vertices.into_iter().unzip();
 
-        let vertex_count = vertices.len();
-        let start_index = self.vertices.len();
+        let vertex_count = positions.len();
+        let start_index = self.positions.len();
         let indices = (2..vertex_count)
             .flat_map(move |i| [start_index, start_index + (i - 1), start_index + i])
             .map(|i| i as u32);
 
-        self.vertices.extend(vertices);
+        self.positions.extend(positions);
+        self.colors.extend(colors);
         self.indices.extend(indices);
 
         self.last_operation = vertex_count;
         self.free_vertices = 0;
     }
     /// Chainable version of [`Self::insert_convex_polygon`].
-    fn with_convex_polygon(mut self, vertices: impl IntoIterator<Item = [f32; 3]>) -> Self {
+    fn with_convex_polygon(
+        mut self,
+        vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>,
+    ) -> Self {
         self.insert_convex_polygon(vertices);
         self
     }
@@ -214,12 +232,12 @@ impl CustomMeshBuilder {
     /// If fewer than three vertices are given, they are still added to the mesh, but no face is created.
     ///
     /// The newly inserted vertices will be selected.
-    fn insert_polygon(&mut self, vertices: impl IntoIterator<Item = [f32; 3]>) {
+    fn insert_polygon(&mut self, vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>) {
         self.insert_vertices(vertices);
         self.close_hole(true);
     }
     /// Chainable version of [`Self::insert_polygon`].
-    fn with_polygon(mut self, vertices: impl IntoIterator<Item = [f32; 3]>) -> Self {
+    fn with_polygon(mut self, vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>) -> Self {
         self.insert_polygon(vertices);
         self
     }
@@ -227,19 +245,19 @@ impl CustomMeshBuilder {
     /// Inserts a filled circle into the mesh, pointing up.
     ///
     /// The newly inserted vertices will be selected.
-    fn insert_filled_circle(&mut self, center: [f32; 3], radius: f32, n: u32) {
-        self.insert_convex_polygon(circle_vertices(center, radius, n));
+    fn insert_filled_circle(&mut self, center: [f32; 3], radius: f32, n: u32, color: Color) {
+        self.insert_convex_polygon(with_col(circle_vertices(center, radius, n), color));
     }
     /// Chainable version of [`Self::insert_filled_circle`].
-    fn with_filled_circle(mut self, center: [f32; 3], radius: f32, n: u32) -> Self {
-        self.insert_filled_circle(center, radius, n);
+    fn with_filled_circle(mut self, center: [f32; 3], radius: f32, n: u32, color: Color) -> Self {
+        self.insert_filled_circle(center, radius, n, color);
         self
     }
 
     /// Inserts a quad going between a and b, pointing up.
     ///
     /// The newly inserted vertices will be selected.
-    fn insert_path_quad(&mut self, a: [f32; 3], b: [f32; 3], width: f32) {
+    fn insert_path_quad(&mut self, a: [f32; 3], b: [f32; 3], width: f32, color: Color) {
         let a = Vec3::from(a);
         let b = Vec3::from(b);
 
@@ -253,11 +271,11 @@ impl CustomMeshBuilder {
             (b - perpendicular).to_array(),
         ];
 
-        self.insert_convex_polygon(vertices);
+        self.insert_convex_polygon(with_col(vertices, color));
     }
     /// Chainable version of [`Self::insert_path_quad`].
-    fn with_path_quad(mut self, a: [f32; 3], b: [f32; 3], width: f32) -> Self {
-        self.insert_path_quad(a, b, width);
+    fn with_path_quad(mut self, a: [f32; 3], b: [f32; 3], width: f32, color: Color) -> Self {
+        self.insert_path_quad(a, b, width, color);
         self
     }
 
@@ -290,37 +308,44 @@ impl CustomMeshBuilder {
     /// ```
     fn quad_loft(
         &mut self,
-        vertices: impl IntoIterator<Item = [f32; 3]>,
+        vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>,
         close_loop: bool,
         flat_shading: bool,
     ) {
-        let new_vertices = vertices
+        let (new_positions, new_colors) = vertices
             .into_iter()
             .take(self.last_operation)
-            .collect::<Vec<_>>();
-        let segment_length = new_vertices.len();
-        let old_segment_start = self.vertices.len() - segment_length;
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        let segment_length = new_positions.len();
+        let old_segment_start = self.positions.len() - segment_length;
 
         let left_old = if flat_shading && self.free_vertices <= segment_length {
-            self.vertices
+            self.positions
                 .extend_from_within(old_segment_start..old_segment_start + segment_length);
-            self.vertices.len() - segment_length
+            self.colors
+                .extend_from_within(old_segment_start..old_segment_start + segment_length);
+            self.positions.len() - segment_length
         } else {
             old_segment_start
         };
-        let left_new = self.vertices.len();
-        self.vertices.extend(&new_vertices);
+        let left_new = self.positions.len();
+        self.positions.extend(&new_positions);
+        self.colors.extend(&new_colors);
         let right_old = if flat_shading {
-            self.vertices
+            self.positions
                 .extend_from_within(left_old..left_old + segment_length);
-            self.vertices.len() - segment_length
+            self.colors
+                .extend_from_within(left_old..left_old + segment_length);
+            self.positions.len() - segment_length
         } else {
             left_old
         };
         let right_new = if flat_shading {
-            self.vertices
+            self.positions
                 .extend_from_within(left_new..left_new + segment_length);
-            self.vertices.len() - segment_length
+            self.colors
+                .extend_from_within(left_new..left_new + segment_length);
+            self.positions.len() - segment_length
         } else {
             left_new
         };
@@ -349,7 +374,7 @@ impl CustomMeshBuilder {
     /// Chainable version of [`Self::quad_loft`].
     fn with_quad_loft(
         mut self,
-        vertices: impl IntoIterator<Item = [f32; 3]>,
+        vertices: impl IntoIterator<Item = ([f32; 3], [f32; 4])>,
         close_loop: bool,
         flat_shading: bool,
     ) -> Self {
@@ -373,16 +398,21 @@ fn circle_vertices(
     })
 }
 
-pub fn field_mesh(
-    geom: &FieldGeometry,
-    mesh_assets: &mut ResMut<Assets<Mesh>>,
-    material_assets: &mut ResMut<Assets<StandardMaterial>>,
-) -> Scene {
-    let field_mat = StandardMaterial::from(Color::srgba_u8(0, 135, 0, 255));
-    let wall_mat = StandardMaterial::from(Color::srgba_u8(0, 0, 0, 255));
-    let goal_y_mat = StandardMaterial::from(Color::srgba_u8(255, 255, 0, 255));
-    let goal_b_mat = StandardMaterial::from(Color::srgba_u8(0, 0, 255, 255));
-    let line_mat = StandardMaterial::from(Color::srgba_u8(255, 255, 255, 255));
+fn with_col(
+    positions: impl IntoIterator<Item = [f32; 3]>,
+    color: Color,
+) -> impl Iterator<Item = ([f32; 3], [f32; 4])> {
+    positions
+        .into_iter()
+        .zip(iter::repeat(color.to_linear().to_f32_array()))
+}
+
+pub fn field_mesh(geom: &FieldGeometry) -> Mesh {
+    let field_col = Color::srgba_u8(0, 135, 0, 255);
+    let wall_col = Color::srgba_u8(0, 0, 0, 255);
+    let goal_y_col = Color::srgba_u8(255, 255, 0, 255);
+    let goal_b_col = Color::srgba_u8(0, 0, 255, 255);
+    let line_col = Color::srgba_u8(255, 255, 255, 255);
 
     static WALL_WIDTH: f32 = 0.04;
     static WALL_HEIGHT: f32 = 0.16;
@@ -392,6 +422,8 @@ pub fn field_mesh(
     static LINE_WIDTH: f32 = 0.01;
     static LINE_HALF: f32 = LINE_WIDTH / 2f32;
 
+    let mut mesh = CustomMeshBuilder::new();
+
     // ==== Field ====
 
     let border_x = geom.play_area_size.x / 2.0;
@@ -399,59 +431,74 @@ pub fn field_mesh(
     let field_x = border_x + geom.boundary_width;
     let field_y = border_y + geom.boundary_width;
 
-    let field_mesh = CustomMeshBuilder::new().with_convex_polygon([
-        [-field_x, 0.0, -field_y],
-        [-field_x, 0.0, field_y],
-        [field_x, 0.0, field_y],
-        [field_x, 0.0, -field_y],
-    ]);
-
-    // ==== Wall ====
-
-    let wall_mesh = CustomMeshBuilder::new()
-        .with_vertices([
+    mesh.insert_convex_polygon(with_col(
+        [
             [-field_x, 0.0, -field_y],
             [-field_x, 0.0, field_y],
             [field_x, 0.0, field_y],
             [field_x, 0.0, -field_y],
-        ])
-        .with_quad_loft(
+        ],
+        field_col,
+    ));
+
+    // ==== Wall ====
+
+    mesh.insert_vertices(with_col(
+        [
+            [-field_x, 0.0, -field_y],
+            [-field_x, 0.0, field_y],
+            [field_x, 0.0, field_y],
+            [field_x, 0.0, -field_y],
+        ],
+        wall_col,
+    ));
+    mesh.quad_loft(
+        with_col(
             [
                 [-field_x, WALL_HEIGHT, -field_y],
                 [-field_x, WALL_HEIGHT, field_y],
                 [field_x, WALL_HEIGHT, field_y],
                 [field_x, WALL_HEIGHT, -field_y],
             ],
-            true,
-            true,
-        )
-        .with_quad_loft(
+            wall_col,
+        ),
+        true,
+        true,
+    );
+    mesh.quad_loft(
+        with_col(
             [
                 [-field_x - WALL_WIDTH, WALL_HEIGHT, -field_y - WALL_WIDTH],
                 [-field_x - WALL_WIDTH, WALL_HEIGHT, field_y + WALL_WIDTH],
                 [field_x + WALL_WIDTH, WALL_HEIGHT, field_y + WALL_WIDTH],
                 [field_x + WALL_WIDTH, WALL_HEIGHT, -field_y - WALL_WIDTH],
             ],
-            true,
-            true,
-        )
-        .with_quad_loft(
+            wall_col,
+        ),
+        true,
+        true,
+    );
+    mesh.quad_loft(
+        with_col(
             [
                 [-field_x - WALL_WIDTH, 0.0, -field_y - WALL_WIDTH],
                 [-field_x - WALL_WIDTH, 0.0, field_y + WALL_WIDTH],
                 [field_x + WALL_WIDTH, 0.0, field_y + WALL_WIDTH],
                 [field_x + WALL_WIDTH, 0.0, -field_y - WALL_WIDTH],
             ],
-            true,
-            true,
-        );
+            wall_col,
+        ),
+        true,
+        true,
+    );
 
     // ==== Goal ====
 
     let goal_y = geom.goal_width / 2.0;
 
-    let goal_yellow_mesh = CustomMeshBuilder::new()
-        .with_vertices([
+    // Yellow goal
+    mesh.insert_vertices(with_col(
+        [
             // Inner
             [-border_x, 0.0, -goal_y + GOAL_WALL_HALF],
             [-field_x + GOAL_WALL, 0.0, -goal_y + GOAL_WALL_HALF],
@@ -462,8 +509,11 @@ pub fn field_mesh(
             [-field_x, 0.0, goal_y + GOAL_WALL_HALF],
             [-field_x, 0.0, -goal_y - GOAL_WALL_HALF],
             [-border_x, 0.0, -goal_y - GOAL_WALL_HALF],
-        ])
-        .with_quad_loft(
+        ],
+        goal_y_col,
+    ));
+    mesh.quad_loft(
+        with_col(
             [
                 // Inner
                 [-border_x, WALL_HEIGHT, -goal_y + GOAL_WALL_HALF],
@@ -476,13 +526,16 @@ pub fn field_mesh(
                 [-field_x, WALL_HEIGHT, -goal_y - GOAL_WALL_HALF],
                 [-border_x, WALL_HEIGHT, -goal_y - GOAL_WALL_HALF],
             ],
-            true,
-            true,
-        )
-        .with_closed_hole(true);
+            goal_y_col,
+        ),
+        true,
+        true,
+    );
+    mesh.close_hole(true);
 
-    let goal_blue_mesh = CustomMeshBuilder::new()
-        .with_vertices([
+    // Blue goal
+    mesh.insert_vertices(with_col(
+        [
             // Inner
             [border_x, 0.0, goal_y - GOAL_WALL_HALF],
             [field_x - GOAL_WALL, 0.0, goal_y - GOAL_WALL_HALF],
@@ -493,8 +546,11 @@ pub fn field_mesh(
             [field_x, 0.0, -goal_y - GOAL_WALL_HALF],
             [field_x, 0.0, goal_y + GOAL_WALL_HALF],
             [border_x, 0.0, goal_y + GOAL_WALL_HALF],
-        ])
-        .with_quad_loft(
+        ],
+        goal_b_col,
+    ));
+    mesh.quad_loft(
+        with_col(
             [
                 // Inner
                 [border_x, WALL_HEIGHT, goal_y - GOAL_WALL_HALF],
@@ -507,48 +563,57 @@ pub fn field_mesh(
                 [field_x, WALL_HEIGHT, goal_y + GOAL_WALL_HALF],
                 [border_x, WALL_HEIGHT, goal_y + GOAL_WALL_HALF],
             ],
-            true,
-            true,
-        )
-        .with_closed_hole(true);
+            goal_b_col,
+        ),
+        true,
+        true,
+    );
+    mesh.close_hole(true);
 
     // ==== Lines ====
 
-    let mut line_mesh = CustomMeshBuilder::new();
-
     // Center circle
-    line_mesh.insert_vertices(circle_vertices(
-        [0.0, 0.0001, 0.0],
-        CENTER_CIRCLE_RADIUS - LINE_HALF,
-        128,
+    mesh.insert_vertices(with_col(
+        circle_vertices([0.0, 0.0001, 0.0], CENTER_CIRCLE_RADIUS - LINE_HALF, 128),
+        line_col,
     ));
-    line_mesh.quad_loft(
-        circle_vertices([0.0, 0.0001, 0.0], CENTER_CIRCLE_RADIUS + LINE_HALF, 128),
+    mesh.quad_loft(
+        with_col(
+            circle_vertices([0.0, 0.0001, 0.0], CENTER_CIRCLE_RADIUS + LINE_HALF, 128),
+            line_col,
+        ),
         true,
         false,
     );
 
     // Center line
-    line_mesh.insert_path_quad(
+    mesh.insert_path_quad(
         [0.0, 0.0001, -border_y],
         [0.0, 0.0001, border_y],
         LINE_WIDTH,
+        line_col,
     );
 
     // Border
-    line_mesh.insert_vertices([
-        [-border_x + LINE_HALF, 0.0001, -border_y + LINE_HALF],
-        [-border_x + LINE_HALF, 0.0001, border_y - LINE_HALF],
-        [border_x - LINE_HALF, 0.0001, border_y - LINE_HALF],
-        [border_x - LINE_HALF, 0.0001, -border_y + LINE_HALF],
-    ]);
-    line_mesh.quad_loft(
+    mesh.insert_vertices(with_col(
         [
-            [-border_x - LINE_HALF, 0.0001, -border_y - LINE_HALF],
-            [-border_x - LINE_HALF, 0.0001, border_y + LINE_HALF],
-            [border_x + LINE_HALF, 0.0001, border_y + LINE_HALF],
-            [border_x + LINE_HALF, 0.0001, -border_y - LINE_HALF],
+            [-border_x + LINE_HALF, 0.0001, -border_y + LINE_HALF],
+            [-border_x + LINE_HALF, 0.0001, border_y - LINE_HALF],
+            [border_x - LINE_HALF, 0.0001, border_y - LINE_HALF],
+            [border_x - LINE_HALF, 0.0001, -border_y + LINE_HALF],
         ],
+        line_col,
+    ));
+    mesh.quad_loft(
+        with_col(
+            [
+                [-border_x - LINE_HALF, 0.0001, -border_y - LINE_HALF],
+                [-border_x - LINE_HALF, 0.0001, border_y + LINE_HALF],
+                [border_x + LINE_HALF, 0.0001, border_y + LINE_HALF],
+                [border_x + LINE_HALF, 0.0001, -border_y - LINE_HALF],
+            ],
+            line_col,
+        ),
         true,
         false,
     );
@@ -557,109 +622,135 @@ pub fn field_mesh(
     let defense_y = geom.defense_size.y / 2.0;
 
     // Defense area yellow
-    line_mesh.insert_vertices([
-        [-border_x, 0.0001, defense_y - LINE_HALF],
-        [-defense_x - LINE_HALF, 0.0001, defense_y - LINE_HALF],
-        [-defense_x - LINE_HALF, 0.0001, -defense_y + LINE_HALF],
-        [-border_x, 0.0001, -defense_y + LINE_HALF],
-    ]);
-    line_mesh.quad_loft(
+    mesh.insert_vertices(with_col(
         [
-            [-border_x, 0.0001, defense_y + LINE_HALF],
-            [-defense_x + LINE_HALF, 0.0001, defense_y + LINE_HALF],
-            [-defense_x + LINE_HALF, 0.0001, -defense_y - LINE_HALF],
-            [-border_x, 0.0001, -defense_y - LINE_HALF],
+            [-border_x, 0.0001, defense_y - LINE_HALF],
+            [-defense_x - LINE_HALF, 0.0001, defense_y - LINE_HALF],
+            [-defense_x - LINE_HALF, 0.0001, -defense_y + LINE_HALF],
+            [-border_x, 0.0001, -defense_y + LINE_HALF],
         ],
+        line_col,
+    ));
+    mesh.quad_loft(
+        with_col(
+            [
+                [-border_x, 0.0001, defense_y + LINE_HALF],
+                [-defense_x + LINE_HALF, 0.0001, defense_y + LINE_HALF],
+                [-defense_x + LINE_HALF, 0.0001, -defense_y - LINE_HALF],
+                [-border_x, 0.0001, -defense_y - LINE_HALF],
+            ],
+            line_col,
+        ),
         true,
         false,
     );
 
     // Defense area blue
-    line_mesh.insert_vertices([
-        [border_x, 0.0001, -defense_y + LINE_HALF],
-        [defense_x + LINE_HALF, 0.0001, -defense_y + LINE_HALF],
-        [defense_x + LINE_HALF, 0.0001, defense_y - LINE_HALF],
-        [border_x, 0.0001, defense_y - LINE_HALF],
-    ]);
-    line_mesh.quad_loft(
+    mesh.insert_vertices(with_col(
         [
-            [border_x, 0.0001, -defense_y - LINE_HALF],
-            [defense_x - LINE_HALF, 0.0001, -defense_y - LINE_HALF],
-            [defense_x - LINE_HALF, 0.0001, defense_y + LINE_HALF],
-            [border_x, 0.0001, defense_y + LINE_HALF],
+            [border_x, 0.0001, -defense_y + LINE_HALF],
+            [defense_x + LINE_HALF, 0.0001, -defense_y + LINE_HALF],
+            [defense_x + LINE_HALF, 0.0001, defense_y - LINE_HALF],
+            [border_x, 0.0001, defense_y - LINE_HALF],
         ],
+        line_col,
+    ));
+    mesh.quad_loft(
+        with_col(
+            [
+                [border_x, 0.0001, -defense_y - LINE_HALF],
+                [defense_x - LINE_HALF, 0.0001, -defense_y - LINE_HALF],
+                [defense_x - LINE_HALF, 0.0001, defense_y + LINE_HALF],
+                [border_x, 0.0001, defense_y + LINE_HALF],
+            ],
+            line_col,
+        ),
         true,
         false,
     );
 
-    let mut world = World::new();
-
-    world.spawn_batch([
-        (
-            Mesh3d(mesh_assets.add(field_mesh.build(false))),
-            MeshMaterial3d(material_assets.add(field_mat)),
-        ),
-        (
-            Mesh3d(mesh_assets.add(wall_mesh.build(false))),
-            MeshMaterial3d(material_assets.add(wall_mat)),
-        ),
-        (
-            Mesh3d(mesh_assets.add(goal_yellow_mesh.build(false))),
-            MeshMaterial3d(material_assets.add(goal_y_mat)),
-        ),
-        (
-            Mesh3d(mesh_assets.add(goal_blue_mesh.build(false))),
-            MeshMaterial3d(material_assets.add(goal_b_mat)),
-        ),
-        (
-            Mesh3d(mesh_assets.add(line_mesh.build(false))),
-            MeshMaterial3d(material_assets.add(line_mat)),
-        ),
-    ]);
-
-    Scene::new(world)
+    mesh.build(false)
 }
 
-pub fn circle_visualization_mesh(n: u32, radius: f32) -> Mesh {
-    CustomMeshBuilder::new()
-        .with_filled_circle([0.0, 0.0, 0.0], radius, n)
-        .build(false)
-}
-
-pub fn polygon_visualization_mesh(vertices: &[Vec2]) -> Mesh {
-    assert!(vertices.len() >= 3);
-
-    let is_ccw = vertices
-        .iter()
-        .zip(vertices.iter().cycle().skip(1))
-        .map(|(a, b)| (b.x - a.x) * (b.y + a.y))
-        .sum::<f32>()
-        > 0.0;
-
-    if is_ccw {
-        CustomMeshBuilder::new()
-            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]))
-            .build(false)
-    } else {
-        CustomMeshBuilder::new()
-            .with_polygon(vertices.iter().map(|p| [p.x, 0.0, p.y]).rev())
-            .build(false)
-    }
-}
-
-pub fn path_visualization_mesh(path: &[Vec2], width: f32) -> Mesh {
-    assert!(!path.is_empty());
-    assert!(width >= 0.0);
+pub fn visualization_mesh(
+    vis_list: &[Visualization],
+    debug_names: Option<&AvailableVisualizations>,
+) -> Mesh {
+    const HEIGHT: f32 = 0.01;
+    const PATH_WIDTH: f32 = 0.01;
 
     let mut mesh = CustomMeshBuilder::new();
 
-    for point in path {
-        mesh.insert_filled_circle([point.x, 0.0, point.y], width / 2.0, 16);
-    }
-    for edge in path.windows(2).filter(|e| e[0] != e[1]) {
-        let a = [edge[0].x, 0.0, edge[0].y];
-        let b = [edge[1].x, 0.0, edge[1].y];
-        mesh.insert_path_quad(a, b, width);
+    for (vis_id, part) in vis_list
+        .iter()
+        .flat_map(|v| v.part.iter().map(move |p| (&v.id, p)))
+    {
+        let color = part
+            .fill_color
+            .and(part.border_style.and_then(|b| b.color))
+            .unwrap_or_default();
+        let color = Color::srgba_u8(
+            color.red as u8,
+            color.green as u8,
+            color.blue as u8,
+            color.alpha as u8,
+        );
+        match part.geom.as_ref() {
+            Some(Geom::Circle(c)) => {
+                mesh.insert_filled_circle([c.p_x, HEIGHT, c.p_y], c.radius, 32, color)
+            }
+            Some(Geom::Polygon(poly)) if !poly.point.is_empty() => {
+                assert!(poly.point.len() >= 3);
+
+                let is_ccw = poly
+                    .point
+                    .iter()
+                    .zip(poly.point.iter().cycle().skip(1))
+                    .map(|(a, b)| (b.x - a.x) * (b.y + a.y))
+                    .sum::<f32>()
+                    > 0.0;
+
+                if is_ccw {
+                    mesh.insert_polygon(with_col(
+                        poly.point.iter().map(|p| [p.x, HEIGHT, p.y]),
+                        color,
+                    ));
+                } else {
+                    mesh.insert_polygon(with_col(
+                        poly.point.iter().map(|p| [p.x, HEIGHT, p.y]).rev(),
+                        color,
+                    ));
+                }
+            }
+            Some(Geom::Path(path)) if !path.point.is_empty() => {
+                for point in &path.point {
+                    mesh.insert_filled_circle([point.x, 0.0, point.y], PATH_WIDTH / 2.0, 16, color);
+                }
+                for edge in path.point.windows(2).filter(|e| e[0] != e[1]) {
+                    let a = [edge[0].x, 0.0, edge[0].y];
+                    let b = [edge[1].x, 0.0, edge[1].y];
+                    mesh.insert_path_quad(a, b, PATH_WIDTH, color);
+                }
+            }
+            None => {
+                warn!(
+                    "Invalid visualization part in {}: No geometry",
+                    debug_names
+                        .and_then(|names| names.visualizations.get(vis_id))
+                        .unwrap_or(&vis_id.to_string())
+                );
+                continue;
+            }
+            _ => {
+                warn!(
+                    "Invalid visualization part in {}: Empty geometry",
+                    debug_names
+                        .and_then(|names| names.visualizations.get(vis_id))
+                        .unwrap_or(&vis_id.to_string())
+                );
+                continue;
+            }
+        }
     }
 
     mesh.build(false)
