@@ -1,6 +1,6 @@
-use crate::proto::remote::Visualization;
 use crate::proto::remote::vis_part::Geom;
-use crate::{AvailableVisualizations, FieldGeometry};
+use crate::proto::remote::{VisPart, Visualization};
+use crate::{AvailableVisualizations, FieldGeometry, proto};
 use bevy::asset::RenderAssetUsages;
 use bevy::color::Color;
 use bevy::math::Vec3;
@@ -9,6 +9,10 @@ use bevy::prelude::*;
 use earcut::Earcut;
 use std::f32::consts::PI;
 use std::iter;
+
+// Visualization parameters
+const Z_HEIGHT: f32 = 0.01;
+const LINE_WIDTH: f32 = 0.01;
 
 /// A builder for constructing 3D meshes programmatically.
 ///
@@ -381,30 +385,154 @@ impl CustomMeshBuilder {
         self.quad_loft(vertices, close_loop, flat_shading);
         self
     }
+
+    fn circle_vis(&mut self, part: &VisPart) {
+        let Some(Geom::Circle(c)) = &part.geom else {
+            return;
+        };
+
+        let center = [c.p_x, Z_HEIGHT, c.p_y];
+        let radius = c.radius;
+
+        // Dynamic vertex count based on radius
+        let resolution = (radius as u32 * 64).max(32);
+
+        match (part.border_style, part.fill_color) {
+            (Some(border), Some(fill)) => {
+                self.insert_filled_circle(
+                    center,
+                    radius - (LINE_WIDTH / 2.),
+                    resolution,
+                    bevy_col(fill),
+                );
+                self.quad_loft(
+                    with_col(
+                        circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
+                        bevy_col(border.color.unwrap_or_default()),
+                    ),
+                    true,
+                    true,
+                );
+            }
+            (Some(border), None) => {
+                let border_col = bevy_col(border.color.unwrap_or_default());
+
+                self.insert_vertices(with_col(
+                    circle_vertices(center, radius - (LINE_WIDTH / 2.), resolution),
+                    border_col,
+                ));
+                self.quad_loft(
+                    with_col(
+                        circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
+                        border_col,
+                    ),
+                    true,
+                    false,
+                );
+            }
+            (None, Some(fill)) => {
+                self.insert_filled_circle(center, radius, 32, bevy_col(fill));
+            }
+            _ => {}
+        }
+    }
+
+    fn polygon_vis(&mut self, part: &VisPart) {
+        let Some(Geom::Polygon(poly)) = &part.geom else {
+            return;
+        };
+
+        if poly.point.len() < 3 {
+            warn!(
+                "Tried to build polygon visualization with less than 3 points.\
+                Degenerate geometry should have already been filtered by the host."
+            );
+            return;
+        }
+
+        let is_ccw = poly
+            .point
+            .iter()
+            .zip(poly.point.iter().cycle().skip(1))
+            .map(|(a, b)| (b.x - a.x) * (b.y + a.y))
+            .sum::<f32>()
+            > 0.0;
+
+        if let Some(fill) = part.fill_color {
+            let fill_col = bevy_col(fill);
+
+            if is_ccw {
+                self.insert_polygon(with_col(poly.point.iter().map(vis_point), fill_col));
+            } else {
+                self.insert_polygon(with_col(poly.point.iter().map(vis_point).rev(), fill_col));
+            }
+        }
+        if let Some(border) = part.border_style {
+            let border_col = bevy_col(border.color.unwrap_or_default());
+
+            for point in &poly.point {
+                self.insert_filled_circle(vis_point(point), LINE_WIDTH / 2.0, 12, border_col);
+            }
+            for edge in poly.point.windows(2) {
+                let a = vis_point(&edge[0]);
+                let b = vis_point(&edge[1]);
+                self.insert_path_quad(a, b, LINE_WIDTH, border_col);
+            }
+            // Add final closing edge
+            let a = poly.point.last().map(vis_point).unwrap();
+            let b = poly.point.first().map(vis_point).unwrap();
+            self.insert_path_quad(a, b, LINE_WIDTH, border_col);
+        }
+    }
+
+    fn path_vis(&mut self, part: &VisPart) {
+        let Some(Geom::Path(path)) = &part.geom else {
+            return;
+        };
+
+        let color = bevy_col(
+            part.fill_color
+                .unwrap_or_else(|| part.border_style.and_then(|b| b.color).unwrap_or_default()),
+        );
+
+        for point in &path.point {
+            self.insert_filled_circle([point.x, Z_HEIGHT, point.y], LINE_WIDTH / 2.0, 16, color);
+        }
+        for edge in path.point.windows(2) {
+            self.insert_path_quad(vis_point(&edge[0]), vis_point(&edge[1]), LINE_WIDTH, color);
+        }
+    }
 }
 
-fn circle_vertices(
-    center: [f32; 3],
-    radius: f32,
-    n: u32,
-) -> impl DoubleEndedIterator<Item = [f32; 3]> {
-    (0..n).map(move |i| {
-        let phi = (2.0 * PI) * (i as f32 / n as f32);
-        [
-            center[0] + phi.sin() * radius,
-            center[1],
-            center[2] + phi.cos() * radius,
-        ]
-    })
-}
+/// Builds a single mesh containing all geometry from the visualization list.
+pub fn visualization_mesh(
+    vis_list: &[Visualization],
+    debug_names: Option<&AvailableVisualizations>,
+) -> Mesh {
+    let mut mesh = CustomMeshBuilder::new();
 
-fn with_col(
-    positions: impl IntoIterator<Item = [f32; 3]>,
-    color: Color,
-) -> impl Iterator<Item = ([f32; 3], [f32; 4])> {
-    positions
-        .into_iter()
-        .zip(iter::repeat(color.to_linear().to_f32_array()))
+    for (vis_id, part) in vis_list
+        .iter()
+        .flat_map(|v| v.part.iter().map(move |p| (&v.id, p)))
+    {
+        match part.geom.as_ref() {
+            Some(Geom::Circle(_)) => mesh.circle_vis(part),
+            Some(Geom::Polygon(poly)) if !poly.point.is_empty() => mesh.polygon_vis(part),
+            Some(Geom::Path(path)) if !path.point.is_empty() => mesh.path_vis(part),
+            other => {
+                warn!(
+                    "Invalid visualization part in {}: {}",
+                    debug_names
+                        .and_then(|names| names.visualizations.get(vis_id))
+                        .unwrap_or(&vis_id.to_string()),
+                    other.map(|_| "Empty geometry").unwrap_or("No geometry")
+                );
+                continue;
+            }
+        }
+    }
+
+    mesh.build(false)
 }
 
 pub fn field_mesh(geom: &FieldGeometry) -> Mesh {
@@ -672,86 +800,41 @@ pub fn field_mesh(geom: &FieldGeometry) -> Mesh {
     mesh.build(false)
 }
 
-pub fn visualization_mesh(
-    vis_list: &[Visualization],
-    debug_names: Option<&AvailableVisualizations>,
-) -> Mesh {
-    const HEIGHT: f32 = 0.01;
-    const PATH_WIDTH: f32 = 0.01;
+// ==== Helper functions ====
 
-    let mut mesh = CustomMeshBuilder::new();
+fn circle_vertices(
+    center: [f32; 3],
+    radius: f32,
+    n: u32,
+) -> impl DoubleEndedIterator<Item = [f32; 3]> {
+    (0..n).map(move |i| {
+        let phi = (2.0 * PI) * (i as f32 / n as f32);
+        [
+            center[0] + phi.sin() * radius,
+            center[1],
+            center[2] + phi.cos() * radius,
+        ]
+    })
+}
 
-    for (vis_id, part) in vis_list
-        .iter()
-        .flat_map(|v| v.part.iter().map(move |p| (&v.id, p)))
-    {
-        let color = part
-            .fill_color
-            .and(part.border_style.and_then(|b| b.color))
-            .unwrap_or_default();
-        let color = Color::srgba_u8(
-            color.red as u8,
-            color.green as u8,
-            color.blue as u8,
-            color.alpha as u8,
-        );
-        match part.geom.as_ref() {
-            Some(Geom::Circle(c)) => {
-                mesh.insert_filled_circle([c.p_x, HEIGHT, c.p_y], c.radius, 32, color)
-            }
-            Some(Geom::Polygon(poly)) if !poly.point.is_empty() => {
-                assert!(poly.point.len() >= 3);
+fn bevy_col(proto_col: proto::remote::Color) -> Color {
+    Color::srgba_u8(
+        proto_col.red as u8,
+        proto_col.green as u8,
+        proto_col.blue as u8,
+        proto_col.alpha as u8,
+    )
+}
 
-                let is_ccw = poly
-                    .point
-                    .iter()
-                    .zip(poly.point.iter().cycle().skip(1))
-                    .map(|(a, b)| (b.x - a.x) * (b.y + a.y))
-                    .sum::<f32>()
-                    > 0.0;
+fn with_col(
+    positions: impl IntoIterator<Item = [f32; 3]>,
+    color: Color,
+) -> impl Iterator<Item = ([f32; 3], [f32; 4])> {
+    positions
+        .into_iter()
+        .zip(iter::repeat(color.to_linear().to_f32_array()))
+}
 
-                if is_ccw {
-                    mesh.insert_polygon(with_col(
-                        poly.point.iter().map(|p| [p.x, HEIGHT, p.y]),
-                        color,
-                    ));
-                } else {
-                    mesh.insert_polygon(with_col(
-                        poly.point.iter().map(|p| [p.x, HEIGHT, p.y]).rev(),
-                        color,
-                    ));
-                }
-            }
-            Some(Geom::Path(path)) if !path.point.is_empty() => {
-                for point in &path.point {
-                    mesh.insert_filled_circle([point.x, 0.0, point.y], PATH_WIDTH / 2.0, 16, color);
-                }
-                for edge in path.point.windows(2).filter(|e| e[0] != e[1]) {
-                    let a = [edge[0].x, 0.0, edge[0].y];
-                    let b = [edge[1].x, 0.0, edge[1].y];
-                    mesh.insert_path_quad(a, b, PATH_WIDTH, color);
-                }
-            }
-            None => {
-                warn!(
-                    "Invalid visualization part in {}: No geometry",
-                    debug_names
-                        .and_then(|names| names.visualizations.get(vis_id))
-                        .unwrap_or(&vis_id.to_string())
-                );
-                continue;
-            }
-            _ => {
-                warn!(
-                    "Invalid visualization part in {}: Empty geometry",
-                    debug_names
-                        .and_then(|names| names.visualizations.get(vis_id))
-                        .unwrap_or(&vis_id.to_string())
-                );
-                continue;
-            }
-        }
-    }
-
-    mesh.build(false)
+fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
+    [p_2d.x, Z_HEIGHT, p_2d.y]
 }
