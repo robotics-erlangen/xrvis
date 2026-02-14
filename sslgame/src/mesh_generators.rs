@@ -320,59 +320,67 @@ impl CustomMeshBuilder {
             .into_iter()
             .take(self.last_operation)
             .unzip::<_, _, Vec<_>, Vec<_>>();
-        let segment_length = new_positions.len();
-        let old_segment_start = self.positions.len() - segment_length;
 
-        let left_old = if flat_shading && self.free_vertices <= segment_length {
-            self.positions
-                .extend_from_within(old_segment_start..old_segment_start + segment_length);
-            self.colors
-                .extend_from_within(old_segment_start..old_segment_start + segment_length);
-            self.positions.len() - segment_length
-        } else {
-            old_segment_start
-        };
-        let left_new = self.positions.len();
-        self.positions.extend(&new_positions);
-        self.colors.extend(&new_colors);
-        let right_old = if flat_shading {
-            self.positions
-                .extend_from_within(left_old..left_old + segment_length);
-            self.colors
-                .extend_from_within(left_old..left_old + segment_length);
-            self.positions.len() - segment_length
-        } else {
-            left_old
-        };
-        let right_new = if flat_shading {
-            self.positions
-                .extend_from_within(left_new..left_new + segment_length);
-            self.colors
-                .extend_from_within(left_new..left_new + segment_length);
-            self.positions.len() - segment_length
-        } else {
-            left_new
-        };
-
-        if close_loop {
-            self.indices.extend((0..segment_length).flat_map(|i| {
-                let lo = (left_old + i) as u32;
-                let ln = (left_new + i) as u32;
-                let ro = (right_old + ((i + 1) % segment_length)) as u32;
-                let rn = (right_new + ((i + 1) % segment_length)) as u32;
-                [lo, ln, rn, lo, rn, ro]
-            }));
-        } else {
-            self.indices.extend((0..segment_length - 1).flat_map(|i| {
-                let lo = (left_old + i) as u32;
-                let ln = (left_new + i) as u32;
-                let ro = (right_old + (i + 1)) as u32;
-                let rn = (right_new + (i + 1)) as u32;
-                [lo, ln, rn, lo, rn, ro]
-            }));
+        let len = new_positions.len();
+        if len == 0 {
+            return;
         }
 
-        self.last_operation = segment_length;
+        // Start index of the last existing vertices
+        let old = self.positions.len() - len;
+
+        // Handle vertex duplication for flat shading to ensure unique normals per quad face
+        // Selects the start indices for each quad corner to allow reusing or separating
+        // vertices depending on if that transition should be blended or not.
+        let (first_old, first_new, second_old, second_new) = if flat_shading {
+            // Flat shading -> Each quad needs fully unique vertices -> Each position gets its own duplicated segment
+
+            // Reuse old vertices if they are free
+            let f_old = if self.free_vertices >= len {
+                old
+            } else {
+                let f_old = self.positions.len();
+                self.positions.extend_from_within(old..old + len);
+                self.colors.extend_from_within(old..old + len);
+                f_old
+            };
+
+            let f_new = self.positions.len();
+            self.positions.extend(&new_positions);
+            self.colors.extend(&new_colors);
+
+            let s_old = self.positions.len();
+            self.positions.extend_from_within(f_old..f_old + len);
+            self.colors.extend_from_within(f_old..f_old + len);
+
+            let s_new = self.positions.len();
+            self.positions.extend_from_within(f_new..f_new + len);
+            self.colors.extend_from_within(f_new..f_new + len);
+
+            (f_old, f_new, s_old, s_new)
+        } else {
+            // Smooth shading -> Quads can share vertices
+            let new = self.positions.len();
+            self.positions.extend(new_positions);
+            self.colors.extend(new_colors);
+            (old, new, old, new)
+        };
+
+        let num_quads = if close_loop { len } else { len - 1 };
+
+        for i in 0..num_quads {
+            let next_i = (i + 1) % len;
+
+            let curr_old = (first_old + i) as u32;
+            let curr_new = (first_new + i) as u32;
+            let next_old = (second_old + next_i) as u32;
+            let next_new = (second_new + next_i) as u32;
+
+            self.indices
+                .extend([curr_old, curr_new, next_new, curr_old, next_new, next_old]);
+        }
+
+        self.last_operation = len;
         self.free_vertices = 0;
     }
     /// Chainable version of [`Self::quad_loft`].
@@ -397,43 +405,30 @@ impl CustomMeshBuilder {
         // Dynamic vertex count based on radius
         let resolution = (radius as u32 * 64).max(32);
 
-        match (part.border_style, part.fill_color) {
-            (Some(border), Some(fill)) => {
-                self.insert_filled_circle(
-                    center,
-                    radius - (LINE_WIDTH / 2.),
-                    resolution,
-                    bevy_col(fill),
-                );
-                self.quad_loft(
-                    with_col(
-                        circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
-                        bevy_col(border.color.unwrap_or_default()),
-                    ),
-                    true,
-                    true,
-                );
-            }
-            (Some(border), None) => {
-                let border_col = bevy_col(border.color.unwrap_or_default());
+        if let Some(fill) = part.fill_color {
+            let fill_radius = if part.border_style.is_some() {
+                radius - LINE_WIDTH / 2.0
+            } else {
+                radius
+            };
+            self.insert_filled_circle(center, fill_radius, resolution, bevy_col(fill));
+        }
 
-                self.insert_vertices(with_col(
-                    circle_vertices(center, radius - (LINE_WIDTH / 2.), resolution),
+        if let Some(border) = part.border_style {
+            let border_col = bevy_col(border.color.unwrap_or_default());
+
+            self.insert_vertices(with_col(
+                circle_vertices(center, radius - (LINE_WIDTH / 2.), resolution),
+                border_col,
+            ));
+            self.quad_loft(
+                with_col(
+                    circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
                     border_col,
-                ));
-                self.quad_loft(
-                    with_col(
-                        circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
-                        border_col,
-                    ),
-                    true,
-                    false,
-                );
-            }
-            (None, Some(fill)) => {
-                self.insert_filled_circle(center, radius, 32, bevy_col(fill));
-            }
-            _ => {}
+                ),
+                true,
+                false,
+            );
         }
     }
 
