@@ -14,6 +14,7 @@ sslgame = { path = "sslgame" }
 bevy = "0.18.0"
 bevy_mod_openxr = { version = "0.5.0", features = ["fb_passthrough"] }
 bevy_mod_xr = "0.5.0"
+schminput = { version = "0.5.0", features = ["xr"] }
 bevy-inspector-egui = "0.36.0"
 bevy_panorbit_camera = "0.34.0"
 

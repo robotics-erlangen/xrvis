@@ -13,6 +13,7 @@ use sslgame::{
 };
 
 mod interaction;
+mod interaction_old;
 
 #[bevy_main]
 pub fn main() -> AppExit {
@@ -22,8 +23,9 @@ pub fn main() -> AppExit {
     app.add_plugins(add_xr_plugins(DefaultPlugins.build()).set(OxrInitPlugin {
         exts: {
             let mut exts = OxrExtensions::default();
-            exts.enable_fb_passthrough();
-            exts.enable_hand_tracking();
+            exts.ext_hand_interaction = true;
+            exts.ext_hand_tracking = true;
+            exts.fb_passthrough = true;
             exts
         },
         ..default()
@@ -64,7 +66,8 @@ pub fn main() -> AppExit {
                 }
             },
         )
-        .add_plugins(interaction::interaction_plugin)
+        .add_plugins(interaction::interaction_plugins)
+        .add_plugins(interaction_old::old_interaction_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
         .add_systems(

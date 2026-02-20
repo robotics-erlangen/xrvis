@@ -13,4 +13,5 @@ crate-type = ["lib", "cdylib"]
 bevy.workspace = true
 bevy_mod_openxr.workspace = true
 bevy_mod_xr.workspace = true
+schminput.workspace = true
 sslgame.workspace = true

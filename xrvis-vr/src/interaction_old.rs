@@ -3,7 +3,9 @@ use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::hands::{HandBone, LeftHand, RightHand, XrHandBoneEntities, XrHandBoneRadius};
 use sslgame::{Field, RenderSettings, RobotRenderSettings};
 
-pub fn interaction_plugin(app: &mut App) {
+// TODO: Replace this with UI panels and system-level input actions
+
+pub fn old_interaction_plugin(app: &mut App) {
     app.add_systems(
         Update,
         (

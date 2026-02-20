@@ -4733,6 +4733,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "schminput"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9550fbcab2bfb7d3a583956c255ee44a73d967994450f2c06f6fd1feb95cd9f3"
+dependencies = [
+ "atomicow",
+ "bevy",
+ "bevy_mod_openxr",
+ "bevy_mod_xr",
+ "openxr",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6639,6 +6652,7 @@ dependencies = [
  "bevy",
  "bevy_mod_openxr",
  "bevy_mod_xr",
+ "schminput",
  "sslgame",
 ]
 
