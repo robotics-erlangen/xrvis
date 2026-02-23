@@ -67,7 +67,7 @@ fn setup_oxr_schminput(mut commands: Commands) {
                     OCULUS_TOUCH_PROFILE,
                     ["/user/hand/left/input/trigger/value"],
                 ),
-            F32ActionValue::new(),
+            BoolActionValue::new(),
         ))
         .id();
     let right_aim_activate = commands
@@ -86,7 +86,7 @@ fn setup_oxr_schminput(mut commands: Commands) {
                     OCULUS_TOUCH_PROFILE,
                     ["/user/hand/right/input/trigger/value"],
                 ),
-            F32ActionValue::new(),
+            BoolActionValue::new(),
         ))
         .id();
 
