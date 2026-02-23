@@ -1,5 +1,6 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
+use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::view::NoIndirectDrawing;
 use bevy_mod_openxr::add_xr_plugins;
 use bevy_mod_openxr::exts::OxrExtensions;
@@ -20,16 +21,21 @@ pub fn main() -> AppExit {
     let mut app = App::new();
 
     // XR setup
-    app.add_plugins(add_xr_plugins(DefaultPlugins.build()).set(OxrInitPlugin {
-        exts: {
-            let mut exts = OxrExtensions::default();
-            exts.ext_hand_interaction = true;
-            exts.ext_hand_tracking = true;
-            exts.fb_passthrough = true;
-            exts
-        },
-        ..default()
-    }))
+    app.add_plugins(
+        // Disabling pipelining improves input latency at the cost of some performance
+        add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
+            OxrInitPlugin {
+                exts: {
+                    let mut exts = OxrExtensions::default();
+                    exts.ext_hand_interaction = true;
+                    exts.ext_hand_tracking = true;
+                    exts.fb_passthrough = true;
+                    exts
+                },
+                ..default()
+            },
+        ),
+    )
     .insert_resource(OxrSessionConfig {
         blend_mode_preference: vec![
             EnvironmentBlendMode::ALPHA_BLEND,
