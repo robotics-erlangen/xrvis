@@ -132,7 +132,8 @@ pub fn drive_xr_pointers(
             let surface_x = local_hit.dot(*transform.right());
             let surface_y = local_hit.dot(*transform.up());
             let surface_hit = Vec2::new(surface_x, surface_y);
-            let normalized_surface_hit = surface_hit / transform.scale().xy();
+            // x-mirror because the panels are -z forward, y-mirror because y is down in UI coordinates
+            let normalized_surface_hit = -surface_hit / transform.scale().xy();
             // Get pixel position on the render target texture (top-left origin, y-down)
             let pointer_pos = (normalized_surface_hit + 0.5) * texture_size.as_vec2();
 

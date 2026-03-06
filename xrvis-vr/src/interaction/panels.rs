@@ -3,15 +3,36 @@ use bevy::camera::RenderTarget;
 use bevy::color::palettes::basic::{BLUE, GRAY, RED};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::ecs::system::SystemParam;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 use std::f32::consts::PI;
 
 pub fn xr_panel_plugin(app: &mut App) {
-    let mesh_handle = app
-        .world_mut()
-        .resource_mut::<Assets<Mesh>>()
-        .add(Plane3d::new(Vec3::NEG_Z, Vec2::splat(0.5)));
+    // Build a 1x1, -z forward, plane with mirrored uvs,
+    // x-mirror because of the negative normal axis (-> "viewed from behind"),
+    // y-mirror because y is down in UI coordinates
+    let mesh_handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        )
+        .with_inserted_indices(Indices::U16(vec![0, 1, 2, 1, 3, 2]))
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_POSITION,
+            vec![
+                [-0.5, -0.5, 0.0],
+                [-0.5, 0.5, 0.0],
+                [0.5, -0.5, 0.0],
+                [0.5, 0.5, 0.0],
+            ],
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 0., -1.]; 4])
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_UV_0,
+            vec![[1., 1.], [1., 0.], [0., 1.], [0., 0.]],
+        ),
+    );
     app.insert_resource(XrPanelMesh(mesh_handle));
 
     // 1000 res -> 1pixel=1mm, 10x scale -> 1unit=1cm
@@ -174,7 +195,6 @@ impl XrPanelSpawner<'_, '_> {
                 Node {
                     width: percent(100),
                     height: percent(100),
-                    flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
@@ -182,8 +202,7 @@ impl XrPanelSpawner<'_, '_> {
                 BackgroundColor(background_color),
                 UiTargetCamera(ui_cam),
             ))
-            .with_children(ui_spawner);
+            .with_children(ui_spawner)
+            .add_child(ui_cam); // Move the UI camera below the panel root to make despawning easier
     }
-
-    // TODO: Handle despawning. Maybe using relations?
 }
