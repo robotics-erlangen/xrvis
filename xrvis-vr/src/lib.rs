@@ -1,3 +1,5 @@
+use crate::panels::XrPanelSpawner;
+use crate::panels::game_state::{score_panel, team_panel};
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
@@ -12,9 +14,11 @@ use sslgame::proto::remote::VisualizationFilter;
 use sslgame::{
     AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
 };
+use std::f32::consts::PI;
 
 mod interaction;
 mod interaction_old;
+mod panels;
 
 #[bevy_main]
 pub fn main() -> AppExit {
@@ -72,8 +76,9 @@ pub fn main() -> AppExit {
                 }
             },
         )
-        .add_plugins(interaction::interaction_plugins)
         .add_plugins(interaction_old::old_interaction_plugin)
+        .add_plugins(interaction::interaction_plugins)
+        .add_plugins(panels::xr_panel_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
         .add_systems(
@@ -85,6 +90,50 @@ pub fn main() -> AppExit {
             brightness: 500.0,
             affects_lightmapped_meshes: false,
         });
+
+    // Show a testpanel that will eventually be used at the side of the field
+    app.add_systems(
+        Startup,
+        move |mut panel_spawner: XrPanelSpawner, asset_server: Res<AssetServer>| {
+            panel_spawner.spawn_panel(
+                Transform {
+                    translation: Vec3::new(0., 1., 0.),
+                    rotation: Quat::from_rotation_x(PI / 4.),
+                    scale: Vec3::new(0.5, 0.5, 1.),
+                },
+                Color::srgba(0., 0., 0., 0.),
+                move |parent| {
+                    parent.spawn(score_panel());
+                },
+            );
+            let team_icon_left = asset_server.load("teams/logos/erforce_light.png");
+            let team_icon_right = team_icon_left.clone();
+            let card_icon_left = asset_server.load("icons/card.png");
+            let card_icon_right = card_icon_left.clone();
+            panel_spawner.spawn_panel(
+                Transform {
+                    translation: Vec3::new(0.3 + 0.75, 1., 0.),
+                    rotation: Quat::from_rotation_x(PI / 4.),
+                    scale: Vec3::new(1.5, 0.5, 1.),
+                },
+                Color::srgba(0., 0., 0., 0.),
+                move |parent| {
+                    parent.spawn(team_panel(team_icon_left, card_icon_left, true));
+                },
+            );
+            panel_spawner.spawn_panel(
+                Transform {
+                    translation: Vec3::new(-0.3 - 0.75, 1., 0.),
+                    rotation: Quat::from_rotation_x(PI / 4.),
+                    scale: Vec3::new(1.5, 0.5, 1.),
+                },
+                Color::srgba(0., 0., 0., 0.),
+                move |parent| {
+                    parent.spawn(team_panel(team_icon_right, card_icon_right, false));
+                },
+            );
+        },
+    );
 
     app.run()
 }

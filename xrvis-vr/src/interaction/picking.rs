@@ -1,5 +1,5 @@
 use crate::interaction::input::{LeftHandPointer, PointerActions, RightHandPointer};
-use crate::interaction::panels::XrPanel;
+use crate::panels::XrPanel;
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};

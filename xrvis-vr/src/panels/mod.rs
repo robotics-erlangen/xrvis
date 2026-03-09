@@ -1,12 +1,12 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
-use bevy::color::palettes::basic::{BLUE, GRAY, RED};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::ecs::system::SystemParam;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
-use std::f32::consts::PI;
+
+pub mod game_state;
 
 pub fn xr_panel_plugin(app: &mut App) {
     // Build a 1x1, -z forward, plane with mirrored uvs,
@@ -40,72 +40,9 @@ pub fn xr_panel_plugin(app: &mut App) {
     app.insert_resource(XrPanelResolution {
         pixels_per_meter: 1000.,
     });
-
-    let test_panel = |parent: &mut RelatedSpawnerCommands<ChildOf>| {
-        parent
-            .spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: auto(),
-                    height: auto(),
-                    align_items: AlignItems::Center,
-                    padding: UiRect::all(px(10.)),
-                    border_radius: BorderRadius::all(px(10.)),
-                    ..default()
-                },
-                BackgroundColor(BLUE.into()),
-            ))
-            .observe(
-                |drag: On<Pointer<Drag>>, mut nodes: Query<(&mut Node, &ComputedNode)>| {
-                    let (mut node, computed) = nodes.get_mut(drag.entity).unwrap();
-                    node.left = px(drag.pointer_location.position.x - computed.size.x / 2.0) / 10.;
-                    node.top = px(drag.pointer_location.position.y - computed.size.y / 2.0) / 10.;
-                },
-            )
-            .observe(
-                |over: On<Pointer<Over>>, mut colors: Query<&mut BackgroundColor>| {
-                    colors.get_mut(over.entity).unwrap().0 = RED.into();
-                },
-            )
-            .observe(
-                |out: On<Pointer<Out>>, mut colors: Query<&mut BackgroundColor>| {
-                    colors.get_mut(out.entity).unwrap().0 = BLUE.into();
-                },
-            )
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new("Drag Me!"),
-                    TextFont {
-                        font_size: 5.,
-                        ..default()
-                    },
-                    TextColor::WHITE,
-                ));
-            });
-    };
-
-    app.add_systems(Startup, move |mut panel_spawner: XrPanelSpawner| {
-        panel_spawner.spawn_panel(
-            Transform {
-                translation: Vec3::new(0., 1., 0.),
-                rotation: Quat::from_rotation_x(PI / 4.),
-                scale: Vec3::new(1., 1., 1.),
-            },
-            Color::srgba(0.5, 1.0, 0.5, 0.8),
-            test_panel,
-        );
-        panel_spawner.spawn_panel(
-            Transform {
-                translation: Vec3::new(0., 0.5, 0.),
-                rotation: Quat::from_rotation_x(PI / 4.),
-                scale: Vec3::new(2., 1., 1.),
-            },
-            GRAY.into(),
-            test_panel,
-        );
-    });
 }
 
+/// Marker component for the display entity/ui root node of an xr panel
 #[derive(Component, Debug)]
 pub struct XrPanel;
 
@@ -160,7 +97,7 @@ impl XrPanelSpawner<'_, '_> {
         let material_handle = self.material_assets.add(StandardMaterial {
             base_color_texture: Some(image_handle.clone()),
             reflectance: 0.02,
-            unlit: false,
+            unlit: true,
             alpha_mode: if background_color.is_fully_opaque() {
                 AlphaMode::Opaque
             } else {
