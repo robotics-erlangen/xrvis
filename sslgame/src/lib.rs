@@ -551,8 +551,9 @@ fn update_world_state(
                     match render_settings.robots {
                         RobotRenderSettings::Detailed => todo!(),
                         RobotRenderSettings::Fallback => {
-                            new_robot
-                                .insert(SceneRoot(asset_server.load("robots/generic.glb#Scene0")));
+                            new_robot.insert(SceneRoot(
+                                asset_server.load("teams/robots/generic.glb#Scene0"),
+                            ));
                         }
                         RobotRenderSettings::Cutout => {
                             new_robot.insert((
