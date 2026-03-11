@@ -12,8 +12,16 @@ message FieldGeometry {
 }
 
 message GameState {
-    optional string yellow_team_name = 2;
-    optional string blue_team_name = 3;
+    optional string game_stage = 1;
+    optional TeamState yellow_team = 2;
+    optional TeamState blue_team = 3;
+}
+
+message TeamState {
+    optional string name = 1;
+    optional uint32 fouls = 2;
+    optional uint32 yellow_cards = 3;
+    optional uint32 red_cards = 4;
 }
 
 // Human-readable names for the ids used in regular updates

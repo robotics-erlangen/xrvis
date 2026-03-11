@@ -253,11 +253,8 @@ pub struct FieldGeometry {
     pub goal_width: f32,
 }
 
-#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
-pub struct GameState {
-    pub yellow_team: String,
-    pub blue_team: String,
-}
+#[derive(Component, Deref, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GameState(proto::remote::GameState);
 
 #[derive(Component, Debug, Default)]
 pub struct AvailableVisualizations {
@@ -405,10 +402,7 @@ fn receive_field_updates(
                     });
                 }
                 UpdatePacket::GameState(new_game_state) => {
-                    game_state.set_if_neq(GameState {
-                        yellow_team: new_game_state.yellow_team_name.unwrap_or_default(),
-                        blue_team: new_game_state.blue_team_name.unwrap_or_default(),
-                    });
+                    game_state.set_if_neq(GameState(new_game_state));
                 }
                 UpdatePacket::VisMappings(new_vis_mappings) => {
                     vis_selection.sources = new_vis_mappings.source;
