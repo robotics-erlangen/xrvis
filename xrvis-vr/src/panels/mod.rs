@@ -42,9 +42,25 @@ pub fn xr_panel_plugin(app: &mut App) {
     });
 }
 
-/// Marker component for the display entity/ui root node of an xr panel
+/// Marks the display mesh of an xr panel, and references the root of its UI hierarchy.
+///
+/// This separation is necessary because UI nodes can't have non-UI parents (or they won't be recognized as roots and won't be rendered),
+/// but anchoring panels to other objects is a common usecase that requires the anchor as the parent.
 #[derive(Component, Debug)]
-pub struct XrPanel;
+#[relationship_target(relationship = XrUiRoot, linked_spawn)]
+pub struct XrPanel(Entity);
+
+/// Marks the root of a UI node that is rendering to the referenced panel.
+///
+/// This separation is necessary because UI nodes can't have non-UI parents (or they won't be recognized as roots and won't be rendered),
+/// but anchoring panels to other objects is a common usecase that requires the anchor as the parent.
+#[derive(Component, Debug)]
+#[relationship(relationship_target = XrPanel)]
+pub struct XrUiRoot(pub Entity);
+
+/// Marker component to find entities used to anchor multiple panels.
+#[derive(Component, Debug)]
+pub struct XrPanelAnchor;
 
 #[derive(Resource, Debug, Deref)]
 struct XrPanelMesh(Handle<Mesh>);
@@ -55,15 +71,14 @@ pub struct XrPanelResolution {
 }
 
 #[derive(SystemParam)]
-pub struct XrPanelSpawner<'w, 's> {
-    commands: Commands<'w, 's>,
+pub struct XrPanelSpawner<'w> {
     panel_mesh: Res<'w, XrPanelMesh>,
     panel_res: Res<'w, XrPanelResolution>,
     image_assets: ResMut<'w, Assets<Image>>,
     material_assets: ResMut<'w, Assets<StandardMaterial>>,
 }
 
-impl XrPanelSpawner<'_, '_> {
+impl XrPanelSpawner<'_> {
     /// Spawns a new spatial UI panel.
     ///
     /// The physical size of the panel is determined by the `x` and `y` components of the `transform` scale (in meters).
@@ -73,10 +88,11 @@ impl XrPanelSpawner<'_, '_> {
     /// automatically generated root node that covers the entire panel.
     pub fn spawn_panel(
         &mut self,
+        commands: &mut Commands,
         transform: Transform,
         background_color: Color,
         ui_spawner: impl FnOnce(&mut RelatedSpawnerCommands<ChildOf>),
-    ) {
+    ) -> Entity {
         let mut image = Image::new_fill(
             Extent3d {
                 width: (transform.scale.x * self.panel_res.pixels_per_meter) as u32,
@@ -101,34 +117,28 @@ impl XrPanelSpawner<'_, '_> {
             alpha_mode: if background_color.is_fully_opaque() {
                 AlphaMode::Opaque
             } else {
-                AlphaMode::Blend
+                AlphaMode::Mask(0.5) // Blending would require translucency sorting
             },
             ..default()
         });
 
         let mesh_handle = self.panel_mesh.clone();
 
-        let ui_cam = self
-            .commands
+        let ui_cam = commands
             .spawn((
                 Camera2d,
                 Camera {
                     // render before the "main pass" camera
                     order: -1,
+                    clear_color: ClearColorConfig::Custom(background_color),
                     ..default()
                 },
                 RenderTarget::Image(image_handle.into()),
             ))
             .id();
 
-        self.commands
+        let ui_root = commands
             .spawn((
-                // Panel
-                XrPanel,
-                Mesh3d(mesh_handle),
-                MeshMaterial3d(material_handle),
-                transform,
-                // UI Root
                 Node {
                     width: percent(100),
                     height: percent(100),
@@ -136,10 +146,21 @@ impl XrPanelSpawner<'_, '_> {
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                BackgroundColor(background_color),
                 UiTargetCamera(ui_cam),
             ))
+            .add_child(ui_cam)
             .with_children(ui_spawner)
-            .add_child(ui_cam); // Move the UI camera below the panel root to make despawning easier
+            .id();
+
+        let display_panel = commands
+            .spawn((
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                transform,
+            ))
+            .add_one_related::<XrUiRoot>(ui_root)
+            .id();
+
+        display_panel
     }
 }

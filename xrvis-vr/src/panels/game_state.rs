@@ -1,5 +1,95 @@
+use crate::panels::{XrPanelAnchor, XrPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
+use sslgame::FieldGeometry;
+use std::f32::consts::PI;
+
+pub fn manage_game_state_panels(
+    mut commands: Commands,
+    mut panel_spawner: XrPanelSpawner,
+    asset_server: Res<AssetServer>,
+    (q_fields, mut q_panels): (
+        Query<(&Transform, Ref<FieldGeometry>, Entity), Without<XrPanelAnchor>>,
+        Query<(&mut Transform, &ChildOf), With<XrPanelAnchor>>,
+    ),
+) {
+    for (field_transform, field_geom, field_entity) in q_fields {
+        let panel_anchor = q_panels
+            .iter_mut()
+            .find(|(_, c)| c.parent() == field_entity);
+
+        match panel_anchor {
+            Some((mut anchor_transform, _)) if field_geom.is_changed() => {
+                // Update position
+                let new_anchor_pos = field_transform.translation
+                    + field_transform.forward()
+                        * (field_geom.play_area_size.y / 2.0 + field_geom.boundary_width + 0.1);
+                anchor_transform.translation = new_anchor_pos;
+                anchor_transform.look_at(Vec3::ZERO, Vec3::Y);
+            }
+            None => {
+                // Spawn new panel
+                let score_panel = panel_spawner.spawn_panel(
+                    &mut commands,
+                    Transform {
+                        translation: Vec3::new(0., 0.5, 0.),
+                        rotation: Quat::from_rotation_x(PI / 6.),
+                        scale: Vec3::new(0.5, 0.5, 1.),
+                    },
+                    Color::srgba(0., 0., 0., 0.),
+                    move |parent| {
+                        parent.spawn(score_panel());
+                    },
+                );
+                let team_icon_left = asset_server.load("teams/logos/erforce_light.png");
+                let team_icon_right = team_icon_left.clone();
+                let card_icon_left = asset_server.load("icons/card.png");
+                let card_icon_right = card_icon_left.clone();
+                let left_panel = panel_spawner.spawn_panel(
+                    &mut commands,
+                    Transform {
+                        translation: Vec3::new(0.3 + 0.75, 0.5, 0.),
+                        rotation: Quat::from_rotation_x(PI / 6.),
+                        scale: Vec3::new(1.5, 0.5, 1.),
+                    },
+                    Color::srgba(0., 0., 0., 0.),
+                    move |parent| {
+                        parent.spawn(team_panel(team_icon_left, card_icon_left, true));
+                    },
+                );
+                let right_panel = panel_spawner.spawn_panel(
+                    &mut commands,
+                    Transform {
+                        translation: Vec3::new(-0.3 - 0.75, 0.5, 0.),
+                        rotation: Quat::from_rotation_x(PI / 6.),
+                        scale: Vec3::new(1.5, 0.5, 1.),
+                    },
+                    Color::srgba(0., 0., 0., 0.),
+                    move |parent| {
+                        parent.spawn(team_panel(team_icon_right, card_icon_right, false));
+                    },
+                );
+
+                let panel_anchor = commands
+                    .spawn((
+                        Transform::from_translation(
+                            field_transform.translation
+                                + field_transform.forward()
+                                    * (field_geom.play_area_size.y / 2.0
+                                        + field_geom.boundary_width
+                                        + 0.1),
+                        )
+                        .looking_at(Vec3::ZERO, Vec3::Y),
+                        XrPanelAnchor,
+                    ))
+                    .add_children(&[score_panel, left_panel, right_panel])
+                    .id();
+                commands.entity(field_entity).add_child(panel_anchor);
+            }
+            _ => {}
+        }
+    }
+}
 
 pub fn score_panel() -> impl Bundle {
     (

@@ -1,5 +1,5 @@
 use crate::interaction::input::{LeftHandPointer, PointerActions, RightHandPointer};
-use crate::panels::XrPanel;
+use crate::panels::{XrPanel, XrUiRoot};
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};
@@ -81,7 +81,8 @@ pub fn drive_xr_pointers(
     // Pointers
     pointers: Query<(&XrPointer, &PointerId, &PointerLocation, &PointerPress)>,
     // Panels
-    panels: Query<(&GlobalTransform, &UiTargetCamera), With<XrPanel>>,
+    panels: Query<&GlobalTransform, With<XrPanel>>,
+    ui_roots: Query<(&UiTargetCamera, &XrUiRoot)>,
     render_targets: Query<&RenderTarget>,
     image_assets: Res<Assets<Image>>,
     // Events
@@ -95,9 +96,11 @@ pub fn drive_xr_pointers(
     for (xr_pointer, pointer_id, prev_pointer_loc, pointer_press) in pointers {
         let mut hits: Vec<XrPointerHit> = Vec::new();
 
-        // Collect pointer hits
-        for (transform, ui_cam) in panels {
-            // Get render target info
+        // Collect pointer hits by looking up the 3d panel for each UI root.
+        // Not doing it the other way around because their relationship only
+        // enforces that every ui root has a panel, not the other direction.
+        for (ui_cam, &XrUiRoot(panel)) in ui_roots {
+            // Query the render target of the ui camera
             let (render_target, texture_size) =
                 if let Ok(RenderTarget::Image(img_target)) = render_targets.get(ui_cam.entity()) {
                     let image = image_assets.get(&img_target.handle).unwrap();
@@ -113,7 +116,10 @@ pub fn drive_xr_pointers(
                     continue;
                 };
 
-            // Calculate intersection with infinite plane
+            // Get the transform of the display mesh (the physical panel)
+            let transform = panels.get(panel).unwrap();
+
+            // Calculate ray-panel intersection point on an infinite plane
             let Some(intersect_dist) = xr_pointer.ray.intersect_plane(
                 transform.translation(),
                 InfinitePlane3d::new(transform.forward()),
@@ -126,7 +132,7 @@ pub fn drive_xr_pointers(
                 continue;
             }
 
-            // Calculate 2d hit position on the surface
+            // Project the 3d intersection onto the panel plane
             let global_hit = xr_pointer.ray.get_point(intersect_dist);
             let local_hit = global_hit - transform.translation();
             let surface_x = local_hit.dot(*transform.right());
@@ -155,7 +161,7 @@ pub fn drive_xr_pointers(
                 continue;
             }
 
-            // Push hit to the list to process later
+            // Hit accepted -> collect for processing
             hits.push(XrPointerHit {
                 location: Location {
                     target: render_target,
@@ -173,7 +179,7 @@ pub fn drive_xr_pointers(
         // Get the closest hit
         let Some(closest_hit) = hits.into_iter().next() else {
             // Cancel the pointer interaction if there are no hits
-            // prev_loc is kept, otherwise the event would be discarded as out-of-bounds before the cancel is processed
+            // The location is still set as prev_loc, otherwise the event would be discarded as out-of-bounds before the cancel is processed.
             if let Some(prev_loc) = &prev_pointer_loc.location {
                 pointer_inputs.write(PointerInput::new(
                     *pointer_id,
