@@ -6643,6 +6643,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_panorbit_camera",
  "sslgame",
+ "xrvis-vr",
 ]
 
 [[package]]

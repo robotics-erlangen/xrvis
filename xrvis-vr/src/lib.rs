@@ -15,7 +15,7 @@ use sslgame::{
 
 mod interaction;
 mod interaction_old;
-mod panels;
+pub mod panels;
 
 #[bevy_main]
 pub fn main() -> AppExit {

@@ -31,6 +31,12 @@ fn main() {
     app.add_plugins(WorldInspectorPlugin::new());
     app.add_systems(EguiPrimaryContextPass, vis_selection_ui);
 
+    #[cfg(feature = "3d-panels")]
+    {
+        app.add_plugins(xrvis_vr_lib::panels::xr_panel_plugin);
+        app.add_systems(Update, xrvis_vr_lib::panels::game_state::manage_game_state_panels);
+    }
+
     app.add_systems(Startup, test_init);
     app.add_systems(
         Update,

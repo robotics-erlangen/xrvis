@@ -4,9 +4,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+3d-panels = ["dep:xrvis-vr"]
+
 [dependencies]
 bevy.workspace = true
 bevy-inspector-egui.workspace = true
 bevy_panorbit_camera.workspace = true
 
 sslgame.workspace = true
+xrvis-vr = { path = "../xrvis-vr", optional = true }
