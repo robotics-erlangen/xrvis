@@ -19,9 +19,10 @@ message GameState {
 
 message TeamState {
     optional string name = 1;
-    optional uint32 fouls = 2;
-    optional uint32 yellow_cards = 3;
-    optional uint32 red_cards = 4;
+    optional uint32 score = 2;
+    optional uint32 fouls = 3;
+    optional uint32 yellow_cards = 4;
+    optional uint32 red_cards = 5;
 }
 
 // Human-readable names for the ids used in regular updates

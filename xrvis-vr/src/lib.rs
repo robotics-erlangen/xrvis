@@ -76,7 +76,7 @@ pub fn main() -> AppExit {
         .add_plugins(interaction_old::old_interaction_plugin)
         .add_plugins(interaction::interaction_plugins)
         .add_plugins(panels::xr_panel_plugin)
-        .add_systems(Update, panels::game_state::manage_game_state_panels)
+        .add_plugins(panels::game_state::game_state_panel_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
         .add_systems(
