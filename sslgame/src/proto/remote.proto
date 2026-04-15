@@ -16,6 +16,7 @@ message WsRequest {
         WsStreamRequest ws_stream_req = 1;
         UdpStreamRequest udp_stream_req = 2;
         VisualizationFilter set_vis_filter = 3;
+        RobotMoveCommand move_robot = 4;
     }
 }
 

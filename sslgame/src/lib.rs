@@ -178,7 +178,7 @@ struct DefaultMaterial {
 )]
 pub struct Field {
     pub host: FieldHost,
-    connection: FieldConnection,
+    pub connection: FieldConnection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -188,8 +188,8 @@ pub struct FieldHost {
 }
 
 #[derive(Debug)]
-struct FieldConnection {
-    sender: Sender<ws_request::Content>,
+pub struct FieldConnection {
+    pub sender: Sender<ws_request::Content>,
     receiver: Receiver<UpdatePacket>,
     io_task: Task<()>,
 }

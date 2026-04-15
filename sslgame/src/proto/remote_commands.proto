@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package remote;
+
+// ==== Robot dragging ====
+
+// Manually moves a robot to the specified location until a different command is issued.
+// This means you have to send an empty command after finishing to hand control back over to the ai.
+message RobotMoveCommand {
+    required uint32 robot_id = 1;
+    required bool is_blue = 2;
+    optional float p_x = 3;
+    optional float p_y = 4;
+}
