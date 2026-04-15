@@ -142,16 +142,21 @@ fn spawn_new_hosts(
 fn setup(mut commands: Commands, mut gizmo_assets: ResMut<Assets<GizmoAsset>>) {
     // Origin marker
     let mut asset = GizmoAsset::new();
-    asset.circle(
+    asset.sphere(
         Isometry3d::IDENTITY,
-        0.1,
-        bevy::color::palettes::basic::WHITE,
+        0.08,
+        bevy::color::palettes::css::WHITE,
+    );
+    asset.line(
+        Vec3::ZERO,
+        Vec3::new(0.0, 0.0, -0.2),
+        bevy::color::palettes::css::WHITE,
     );
     commands.spawn((
         Gizmo {
             handle: gizmo_assets.add(asset),
             ..default()
         },
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        Transform::default(),
     ));
 }
