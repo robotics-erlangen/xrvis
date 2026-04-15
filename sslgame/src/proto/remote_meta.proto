@@ -4,6 +4,7 @@ package remote;
 
 // Host -udp> Multicast
 
+// Advertisement packets are continuously broadcast by the host to allow clients to initiate a connection.
 message HostAdvertisement {
     required uint32 websocket_port = 1;
     // Display name of this host (usually the device hostname)
@@ -14,6 +15,8 @@ message HostAdvertisement {
 
 // Client -ws> Host
 
+// Subscribe to updates for any number of websocket streams. A new subscription will always
+// send the current state once and then only retransmit when its value changes.
 message WsStreamRequest {
     enum WsStream {
         FieldGeometry = 1;
@@ -24,6 +27,8 @@ message WsStreamRequest {
     repeated WsStream stream = 1;
 }
 
+// Subscribe to any number of udp streams. Each stream continuously sends its
+// full state each frame, making them useful for highly dynamic data.
 message UdpStreamRequest {
     enum UdpStream {
         WorldState = 1;

@@ -2,9 +2,15 @@ syntax = "proto2";
 
 package remote;
 
+import "remote_commands.proto";
 import "remote_meta.proto";
 import "remote_status.proto";
 
+// All coordinates use the same global coordinate system, like vision coordinates but in meters instead of millimeters.
+// That means: (right-handed, z up, x towards blue goal, +x forward)
+// TODO: More protocol documentation
+
+// Root packer: Client -ws> Host
 message WsRequest {
     oneof content {
         WsStreamRequest ws_stream_req = 1;
@@ -13,6 +19,7 @@ message WsRequest {
     }
 }
 
+// Root packet: Host -ws> Client
 message WsPacket {
     oneof content {
         FieldGeometry geom = 1;
@@ -21,6 +28,7 @@ message WsPacket {
     }
 }
 
+// Root packet: Host -udp> Client
 message UdpPacket {
     oneof content {
         WorldState world_state = 1;
