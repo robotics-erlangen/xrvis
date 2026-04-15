@@ -161,6 +161,7 @@ impl XrPanelSpawner<'_> {
             .add_one_related::<XrUiRoot>(ui_root)
             .id();
 
+        #[allow(clippy::let_and_return)]
         display_panel
     }
 }

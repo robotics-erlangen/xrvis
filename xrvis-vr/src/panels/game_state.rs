@@ -10,6 +10,7 @@ pub fn game_state_panel_plugin(app: &mut App) {
     app.add_systems(Update, update_team_panel);
 }
 
+#[allow(clippy::type_complexity)]
 fn manage_game_state_panels(
     mut commands: Commands,
     mut panel_spawner: XrPanelSpawner,

@@ -105,6 +105,7 @@ pub struct RightHandInteractionState {
     start_finger_pos: Vec3,
 }
 
+#[allow(clippy::type_complexity)]
 fn right_hand_interaction(
     mut gizmos: Gizmos,
     mut commands: Commands,
