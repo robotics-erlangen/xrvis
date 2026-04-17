@@ -2,6 +2,7 @@ use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::view::NoIndirectDrawing;
+use bevy_hanabi::ParticleEffect;
 use bevy_mod_openxr::add_xr_plugins;
 use bevy_mod_openxr::exts::OxrExtensions;
 use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
@@ -10,7 +11,8 @@ use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::EnvironmentBlendMode;
 use sslgame::proto::remote::VisualizationFilter;
 use sslgame::{
-    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
+    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, SmotsWindEffect,
+    ssl_game_plugin,
 };
 
 mod interaction;
@@ -116,6 +118,7 @@ fn spawn_new_hosts(
     mut commands: Commands,
     available_hosts: Res<AvailableHosts>,
     q_spawned_field: Option<Single<(&Field, Entity)>>,
+    smots_wind_effect: Res<SmotsWindEffect>,
 ) {
     let new_hosts = &available_hosts.0;
 
@@ -128,11 +131,19 @@ fn spawn_new_hosts(
                     .any(|h| field.host.websocket_addr == h.websocket_addr) =>
             {
                 commands.entity(*entity).despawn();
-                commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
+                commands.spawn((
+                    Field::bind((*new_host).clone()),
+                    Transform::IDENTITY,
+                    children![ParticleEffect::new(smots_wind_effect.0.clone())],
+                ));
             }
             // Spawn a new field if there isn't one currently spawned
             None => {
-                commands.spawn((Field::bind(new_host.clone()), Transform::IDENTITY));
+                commands.spawn((
+                    Field::bind(new_host.clone()),
+                    Transform::IDENTITY,
+                    children![ParticleEffect::new(smots_wind_effect.0.clone())],
+                ));
             }
             _ => {}
         }

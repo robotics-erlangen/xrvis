@@ -23,6 +23,10 @@ use async_channel::{Receiver, Sender};
 use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
+use bevy_hanabi::{
+    Attribute, EffectAsset, ExprWriter, HanabiPlugin, OrientMode, OrientModifier, ScalarType,
+    SetAttributeModifier, SpawnerSettings, VectorType,
+};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -37,6 +41,7 @@ pub fn ssl_game_plugin(app: &mut App) {
     });
 
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
+    app.add_plugins(HanabiPlugin);
 
     let world = app.world_mut();
 
@@ -50,6 +55,80 @@ pub fn ssl_game_plugin(app: &mut App) {
         0.0215,
         SphereKind::Ico { subdivisions: 3 },
     )));
+
+    // Particle Effect
+    let wind_effect = {
+        let writer = ExprWriter::new();
+
+        let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
+
+        let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.7).expr());
+
+        let init_pos = SetAttributeModifier {
+            attribute: Attribute::POSITION,
+            value: writer
+                .rand(VectorType::VEC3F)
+                .mul(writer.lit(Vec3::new(1., 2., 5.))) // z = field width
+                .sub(writer.lit(Vec3::new(6., 0., 2.5))) // x = -field_width / 2
+                .expr(),
+        };
+
+        let min_speed = 5.;
+        let max_speed = 7.;
+        let init_vel = SetAttributeModifier {
+            attribute: Attribute::VELOCITY,
+            value: writer
+                .lit(Vec3::new(1., 0., 0.))
+                .mul(
+                    writer.lit(min_speed)
+                        + writer.lit(max_speed - min_speed) * writer.rand(ScalarType::Float),
+                )
+                .expr(),
+        };
+
+        let init_scale = SetAttributeModifier {
+            attribute: Attribute::SIZE3,
+            value: writer.lit(Vec3::new(0.8, 0.05, 1.)).expr(),
+        };
+
+        let update_scale = SetAttributeModifier {
+            attribute: Attribute::SIZE3,
+            value: (writer.lit(Vec3::new(0., 0.05, 1.))
+                + (writer.lit(Vec3::new(1., 0., 0.))
+                    * writer
+                        .attr(Attribute::AGE)
+                        .mul(writer.lit(5.))
+                        .min(
+                            writer
+                                .attr(Attribute::LIFETIME)
+                                .sub(writer.attr(Attribute::AGE))
+                                .mul(writer.lit(5.)),
+                        )
+                        .min(writer.lit(1.))))
+            .expr(),
+        };
+
+        let init_color = SetAttributeModifier::new(
+            Attribute::COLOR,
+            writer.lit(Vec4::new(1., 1., 1., 1.)).pack4x8unorm().expr(),
+        );
+
+        let module = writer.finish();
+
+        let wind_effect = EffectAsset::new(1000, SpawnerSettings::rate(20.0.into()), module)
+            .with_name("smots_wind")
+            .with_alpha_mode(bevy_hanabi::AlphaMode::Opaque)
+            .init(init_pos)
+            .init(init_vel)
+            .init(init_scale)
+            .init(init_age)
+            .init(init_lifetime)
+            .init(init_color)
+            .render(OrientModifier::new(OrientMode::AlongVelocity))
+            .update(update_scale);
+
+        world.resource_mut::<Assets<EffectAsset>>().add(wind_effect)
+    };
 
     // Materials
     let robot_mask_material = world
@@ -70,6 +149,7 @@ pub fn ssl_game_plugin(app: &mut App) {
         opaque: white_mat_opaque,
         translucent: white_mat_translucent,
     });
+    app.insert_resource(SmotsWindEffect(wind_effect));
 
     app.insert_resource(AvailableHosts::default());
 
@@ -162,6 +242,9 @@ struct DefaultMaterial {
     pub opaque: Handle<StandardMaterial>,
     pub translucent: Handle<StandardMaterial>,
 }
+
+#[derive(Resource, Debug)]
+pub struct SmotsWindEffect(pub Handle<EffectAsset>);
 
 // ======== Field connection components ========
 
