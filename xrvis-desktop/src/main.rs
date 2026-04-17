@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_hanabi::ParticleEffect;
 /*use bevy_nokhwa::BevyNokhwaPlugin;
 use bevy_nokhwa::camera::BackgroundCamera;
 use bevy_nokhwa::nokhwa::utils::{
@@ -13,7 +14,7 @@ use sslgame::field::Field;
 use sslgame::field::discovery::AvailableHosts;
 use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
 use sslgame::proto::remote::VisualizationFilter;
-use sslgame::ssl_game_plugin;
+use sslgame::{SmotsWindEffect, ssl_game_plugin};
 
 fn main() {
     let mut app = App::new();
@@ -50,6 +51,7 @@ fn main() {
 fn spawn_new_hosts(
     mut commands: Commands,
     available_hosts: Res<AvailableHosts>,
+    smots_wind_effect: Res<SmotsWindEffect>,
     mut q_spawned_fields: Query<Entity, With<Field>>,
 ) {
     if !available_hosts.is_changed() {
@@ -71,6 +73,7 @@ fn spawn_new_hosts(
         commands.spawn((
             Field::bind(new_host.clone()),
             Transform::from_xyz(0.0, 0.0, z_pos),
+            children![ParticleEffect::new(smots_wind_effect.0.clone())],
         ));
     });
 }

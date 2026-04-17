@@ -15,6 +15,7 @@ bevy = "0.19.0"
 bevy_mod_openxr = { version = "0.6.0", features = ["fb_passthrough"] }
 bevy_mod_xr = "0.6.0"
 schminput = { git = "https://github.com/MaximilianHausen/Schminput.git", rev = "1ff3e94a008914c93227cc6023d5fb9ff1546ba8", features = ["xr"] }
+bevy_hanabi = { version = "0.19.0", default-features = false, features = ["3d"] }
 bevy-inspector-egui = "0.37.0"
 bevy_panorbit_camera = "0.35.0"
 

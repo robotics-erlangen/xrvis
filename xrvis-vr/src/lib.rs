@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::view::NoIndirectDrawing;
 use bevy::window::ExitCondition;
+use bevy_hanabi::ParticleEffect;
 use bevy_mod_openxr::add_xr_plugins;
 use bevy_mod_openxr::exts::OxrExtensions;
 use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
@@ -13,7 +14,7 @@ use sslgame::field::Field;
 use sslgame::field::discovery::AvailableHosts;
 use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
 use sslgame::proto::remote::VisualizationFilter;
-use sslgame::ssl_game_plugin;
+use sslgame::{SmotsWindEffect, ssl_game_plugin};
 
 mod interaction;
 mod interaction_old;
@@ -126,6 +127,7 @@ fn spawn_new_hosts(
     mut commands: Commands,
     available_hosts: Res<AvailableHosts>,
     q_spawned_field: Option<Single<(&Field, Entity)>>,
+    smots_wind_effect: Res<SmotsWindEffect>,
 ) {
     let new_hosts = &available_hosts.0;
 
@@ -138,11 +140,19 @@ fn spawn_new_hosts(
                     .any(|h| field.host.websocket_addr == h.websocket_addr) =>
             {
                 commands.entity(*entity).despawn();
-                commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
+                commands.spawn((
+                    Field::bind((*new_host).clone()),
+                    Transform::IDENTITY,
+                    children![ParticleEffect::new(smots_wind_effect.0.clone())],
+                ));
             }
             // Spawn a new field if there isn't one currently spawned
             None => {
-                commands.spawn((Field::bind(new_host.clone()), Transform::IDENTITY));
+                commands.spawn((
+                    Field::bind(new_host.clone()),
+                    Transform::IDENTITY,
+                    children![ParticleEffect::new(smots_wind_effect.0.clone())],
+                ));
             }
             _ => {}
         }

@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 bevy.workspace = true
+bevy_hanabi.workspace = true
 earcut.workspace = true
 
 bytes.workspace = true
