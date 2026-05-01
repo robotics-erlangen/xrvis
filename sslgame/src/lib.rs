@@ -4,13 +4,13 @@ pub mod proto {
     }
 }
 mod depth_mask_material;
-mod mesh_generators;
+mod mesh_gen;
 mod network_tasks;
 mod visualization_tracker;
 mod world_state_filter;
 
 use crate::depth_mask_material::DepthMaskMaterial;
-use crate::mesh_generators::*;
+use crate::mesh_gen::field::field_mesh;
 use crate::network_tasks::{UpdatePacket, host_discovery_task};
 use crate::proto::remote::udp_stream_request::UdpStream;
 use crate::proto::remote::ws_stream_request::WsStream;
@@ -23,6 +23,7 @@ use async_channel::{Receiver, Sender};
 use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
+use mesh_gen::vis::simple::visualization_mesh;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
