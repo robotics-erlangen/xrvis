@@ -587,11 +587,12 @@ fn update_visualizations(
     ),
 ) {
     for (mut vis_tracker, vis_names, field_entity) in &mut q_fields {
-        let (group_count, updated_groups, new_visualizations) = vis_tracker.visualization_updates();
-        // No new visualizations -> skip field
-        if new_visualizations.is_empty() {
+        let Some((group_count, updated_groups, new_visualizations)) =
+            vis_tracker.visualization_updates()
+        else {
+            // No new visualizations packets -> keep old visualizations
             continue;
-        }
+        };
 
         // Despawn old visualization meshes
         q_visualizations

@@ -13,7 +13,7 @@ impl VisualizationTracker {
     /// Collects all updated visualization since the last call
     /// and some information about which groups are affected.
     /// (group_count, updated_groups, new_visualizations)
-    pub fn visualization_updates(&mut self) -> (u32, HashSet<u32>, Vec<Visualization>) {
+    pub fn visualization_updates(&mut self) -> Option<(u32, HashSet<u32>, Vec<Visualization>)> {
         if self.history.is_empty() {
             return Default::default();
         }
@@ -56,11 +56,11 @@ impl VisualizationTracker {
         // Clear the history so that each update is only returned once
         self.history.clear();
 
-        (
+        Some((
             group_count,
             group_sources.keys().copied().collect(),
             visualizations,
-        )
+        ))
     }
 
     pub fn push_update(&mut self, mut new_update: VisualizationUpdate) {
