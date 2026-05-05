@@ -11,6 +11,7 @@ mod world_state_filter;
 
 use crate::depth_mask_material::DepthMaskMaterial;
 use crate::mesh_gen::field::field_mesh;
+use crate::mesh_gen::vis::visualization_mesh;
 use crate::network_tasks::{UpdatePacket, host_discovery_task};
 use crate::proto::remote::udp_stream_request::UdpStream;
 use crate::proto::remote::ws_stream_request::WsStream;
@@ -23,7 +24,6 @@ use async_channel::{Receiver, Sender};
 use bevy::mesh::{CylinderAnchor, CylinderMeshBuilder, SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
-use mesh_gen::vis::simple::visualization_mesh;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -578,6 +578,7 @@ fn update_world_state(
 #[allow(clippy::type_complexity)]
 fn update_visualizations(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     render_settings: Res<RenderSettings>,
     material: Res<DefaultMaterial>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
@@ -609,15 +610,43 @@ fn update_visualizations(
             // Generate and Spawn new visualization meshes
             for visualization in new_visualizations {
                 let vis_id = visualization.id;
-                let vis_mesh =
-                    mesh_assets.add(visualization_mesh(&[visualization], Some(vis_names)));
 
-                commands.entity(field_entity).with_child((
-                    Visualization(vis_id),
-                    Transform::default(),
-                    Mesh3d(vis_mesh),
-                    MeshMaterial3d(material.translucent.clone()),
-                ));
+                if !visualization.shape.is_empty() {
+                    let vis_mesh =
+                        mesh_assets.add(visualization_mesh(&visualization, Some(vis_names)));
+
+                    commands.entity(field_entity).with_child((
+                        Visualization(vis_id),
+                        Transform::default(),
+                        Mesh3d(vis_mesh),
+                        MeshMaterial3d(material.translucent.clone()),
+                    ));
+                }
+
+                for asset_vis in visualization.asset {
+                    if let Some(anim) = asset_vis.animation {
+                        // TODO: Implement asset vis animations
+                        warn!(
+                            "Asset vis animations aren't implemented yet, tried playing {}:{anim}",
+                            asset_vis.path
+                        );
+                    }
+                    commands.entity(field_entity).with_child((
+                        Visualization(vis_id),
+                        Transform {
+                            translation: asset_vis
+                                .pos
+                                .map(|p| Vec3::new(p.x, 0., p.y))
+                                .unwrap_or(Vec3::ZERO),
+                            rotation: Quat::from_rotation_y(asset_vis.angle.unwrap_or(0.0)),
+                            scale: Vec3::ONE,
+                        },
+                        SceneRoot(
+                            // FIXME: Very easy path injection vulnerability (I guess there are already some others but this one seems especially obvious)
+                            asset_server.load(format!("vis_assets/{}.glb#Scene0", asset_vis.path)),
+                        ),
+                    ));
+                }
             }
         }
     }

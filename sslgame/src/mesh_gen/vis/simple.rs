@@ -1,6 +1,6 @@
 use crate::mesh_gen::{CustomMeshBuilder, bevy_col, circle_vertices, with_col};
-use crate::proto::remote::vis_part::Geom;
-use crate::proto::remote::{VisPart, Visualization};
+use crate::proto::remote::vis_shape::Geom;
+use crate::proto::remote::{VisShape, Visualization};
 use crate::{AvailableVisualizations, proto};
 use bevy::mesh::Mesh;
 use tracing::warn;
@@ -9,15 +9,15 @@ const Z_HEIGHT: f32 = 0.01;
 const LINE_WIDTH: f32 = 0.01;
 
 /// Builds a single mesh containing all geometry from the visualization list.
-pub fn visualization_mesh(
-    vis_list: &[Visualization],
+pub fn simple_vis_mesh(
+    vis_list: &[&Visualization],
     debug_names: Option<&AvailableVisualizations>,
 ) -> Mesh {
     let mut mesh = CustomMeshBuilder::new();
 
     for (vis_id, part) in vis_list
         .iter()
-        .flat_map(|v| v.part.iter().map(move |p| (&v.id, p)))
+        .flat_map(|v| v.shape.iter().map(|p| (&v.id, p)))
     {
         match part.geom.as_ref() {
             Some(Geom::Circle(_)) => circle_vis(&mut mesh, part),
@@ -43,12 +43,12 @@ fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
     [p_2d.x, Z_HEIGHT, p_2d.y]
 }
 
-fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisPart) {
+fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     let Some(Geom::Circle(c)) = &part.geom else {
         return;
     };
 
-    let center = [c.p_x, Z_HEIGHT, c.p_y];
+    let center = [c.center.x, Z_HEIGHT, c.center.y];
     let radius = c.radius;
 
     // Dynamic vertex count based on radius
@@ -81,7 +81,7 @@ fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisPart) {
     }
 }
 
-fn polygon_vis(builder: &mut CustomMeshBuilder, part: &VisPart) {
+fn polygon_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     let Some(Geom::Polygon(poly)) = &part.geom else {
         return;
     };
@@ -129,7 +129,7 @@ fn polygon_vis(builder: &mut CustomMeshBuilder, part: &VisPart) {
     }
 }
 
-fn path_vis(builder: &mut CustomMeshBuilder, part: &VisPart) {
+fn path_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     let Some(Geom::Path(path)) = &part.geom else {
         return;
     };

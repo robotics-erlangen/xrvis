@@ -1,7 +1,8 @@
-use crate::proto::remote::vis_part::Geom;
+use crate::proto::remote::vis_shape::Geom;
 use crate::proto::remote::{Visualization, VisualizationUpdate};
 use bevy::prelude::Component;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::f32::consts::PI;
 
 #[derive(Component, Debug, Default)]
 pub struct VisualizationTracker {
@@ -21,7 +22,7 @@ impl VisualizationTracker {
         let group_count = self
             .history
             .front()
-            .and_then(|v| v.visualization_group)
+            .and_then(|v| v.group_selector)
             .map(|g| g.group_count)
             .unwrap_or(1);
 
@@ -31,7 +32,7 @@ impl VisualizationTracker {
 
         self.history
             .iter()
-            .map(|v| (v.visualization_group.unwrap(), &v.visualization_set))
+            .map(|v| (v.group_selector.unwrap(), &v.visualization_set))
             .for_each(|(group, vis_sets)| {
                 let seen_sources = group_sources.entry(group.group).or_default();
 
@@ -67,7 +68,7 @@ impl VisualizationTracker {
         remap_visualizations(&mut new_update);
 
         let new_group_count = new_update
-            .visualization_group
+            .group_selector
             .map(|g| g.group_count)
             .unwrap_or(1);
 
@@ -78,7 +79,7 @@ impl VisualizationTracker {
         let mut truncate_at = None;
 
         for (i, update) in self.history.iter().enumerate() {
-            if let Some(group) = update.visualization_group {
+            if let Some(group) = update.group_selector {
                 if new_group_count == group.group_count {
                     seen_groups.insert(group.group);
                 } else {
@@ -107,10 +108,10 @@ fn remap_visualizations(vis_update: &mut VisualizationUpdate) {
         .iter_mut()
         .flat_map(|set| &mut set.visualization)
     {
-        for part in &mut vis.part {
+        for part in &mut vis.shape {
             match &mut part.geom {
                 Some(Geom::Circle(c)) => {
-                    c.p_y = -c.p_y;
+                    c.center.y = -c.center.y;
                 }
                 Some(Geom::Polygon(p)) => {
                     for point in &mut p.point {
@@ -123,6 +124,14 @@ fn remap_visualizations(vis_update: &mut VisualizationUpdate) {
                     }
                 }
                 None => {}
+            }
+        }
+        for asset in &mut vis.asset {
+            if let Some(pos) = &mut asset.pos {
+                pos.y = -pos.y;
+            }
+            if let Some(phi) = &mut asset.angle {
+                *phi -= PI / 2.0;
             }
         }
     }
