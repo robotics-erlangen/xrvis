@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::hands::{HandBone, LeftHand, RightHand, XrHandBoneEntities, XrHandBoneRadius};
-use sslgame::{Field, RenderSettings, RobotRenderSettings};
+use sslgame::field::Field;
+use sslgame::{RenderSettings, RobotRenderSettings};
 
 // TODO: Replace this with UI panels and system-level input actions
 

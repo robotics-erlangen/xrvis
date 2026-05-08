@@ -1,7 +1,4 @@
 use bevy::prelude::*;
-use sslgame::{
-    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
-};
 /*use bevy_nokhwa::BevyNokhwaPlugin;
 use bevy_nokhwa::camera::BackgroundCamera;
 use bevy_nokhwa::nokhwa::utils::{
@@ -12,7 +9,11 @@ use bevy_inspector_egui::bevy_egui::{EguiGlobalSettings, EguiPlugin, EguiPrimary
 use bevy_inspector_egui::egui;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
+use sslgame::field::Field;
+use sslgame::field::discovery::AvailableHosts;
+use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
 use sslgame::proto::remote::VisualizationFilter;
+use sslgame::ssl_game_plugin;
 
 fn main() {
     let mut app = App::new();

@@ -10,8 +10,9 @@ use bevy::picking::pointer::{
 };
 use bevy::prelude::*;
 use schminput::BoolActionValue;
+use sslgame::field::robots::Robot;
+use sslgame::field::{Field, FieldGeometry, Team};
 use sslgame::proto::remote::{RobotMoveCommand, ws_request};
-use sslgame::{Field, FieldGeometry, Robot, Team};
 use std::ops::Range;
 use std::time::Instant;
 

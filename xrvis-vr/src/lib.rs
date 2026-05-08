@@ -8,10 +8,11 @@ use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
 use bevy_mod_openxr::init::OxrInitPlugin;
 use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::EnvironmentBlendMode;
+use sslgame::field::Field;
+use sslgame::field::discovery::AvailableHosts;
+use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
 use sslgame::proto::remote::VisualizationFilter;
-use sslgame::{
-    AvailableHosts, AvailableVisualizations, Field, SelectedVisualizations, ssl_game_plugin,
-};
+use sslgame::ssl_game_plugin;
 
 mod interaction;
 mod interaction_old;

@@ -1,7 +1,7 @@
 use crate::panels::{XrPanelAnchor, XrPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
-use sslgame::{FieldGeometry, GameState, Team};
+use sslgame::field::{FieldGeometry, GameState, Team};
 use std::f32::consts::PI;
 
 pub fn game_state_panel_plugin(app: &mut App) {
