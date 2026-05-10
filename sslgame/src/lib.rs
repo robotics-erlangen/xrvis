@@ -7,8 +7,8 @@ mod depth_mask_material;
 pub mod field;
 mod mesh_gen;
 mod network_tasks;
+mod transform_filter;
 mod visualization_tracker;
-mod world_state_filter;
 
 use crate::field::Field;
 use crate::field::robots::{Ball, Robot};

@@ -15,7 +15,7 @@ use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::{Duration, Instant};
 
-// TODO: Leave multicast groups before stopping
+// TODO: Gracefully leave multicast groups before stopping
 
 const BEACON_ADDR_V4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(239, 1, 1, 1), 11000);
 const BEACON_ADDR_V6: SocketAddrV6 = SocketAddrV6::new(
@@ -197,7 +197,7 @@ impl From<udp_packet::Content> for UpdatePacket {
 #[tracing::instrument(skip(packets_out, requests_in))]
 pub async fn io_task(
     host: SocketAddr,
-    packets_out: Sender<UpdatePacket>,
+    packets_out: Sender<(UpdatePacket, Instant)>,
     requests_in: Receiver<ws_request::Content>,
 ) {
     // ======== Socket setup ========
@@ -301,21 +301,22 @@ pub async fn io_task(
 
     let mut warn_cooldown = Instant::now();
 
-    // Returns false if the receiver was dropped and the thread sould be stopped
-    let mut packet_out_send = |packet: UpdatePacket| match packets_out.try_send(packet) {
-        Ok(_) => true,
-        Err(TrySendError::Full(_)) => {
-            if warn_cooldown < Instant::now() {
-                warn!("Status rx channel full (system can't keep up)");
-                warn_cooldown = Instant::now() + Duration::from_secs(5);
+    // Returns false if the receiver was dropped and the thread should be stopped
+    let mut packet_out_send =
+        |packet: UpdatePacket| match packets_out.try_send((packet, Instant::now())) {
+            Ok(_) => true,
+            Err(TrySendError::Full(_)) => {
+                if warn_cooldown < Instant::now() {
+                    warn!("Status rx channel full (system can't keep up)");
+                    warn_cooldown = Instant::now() + Duration::from_secs(5);
+                }
+                true
             }
-            true
-        }
-        Err(TrySendError::Closed(_)) => {
-            debug!("Packet receiver dropped, stopping io task");
-            false
-        }
-    };
+            Err(TrySendError::Closed(_)) => {
+                debug!("Packet receiver dropped, stopping io task");
+                false
+            }
+        };
 
     while let Some(event) = combined_stream
         .next()
@@ -367,5 +368,5 @@ pub async fn io_task(
         }
     }
 
-    info!("Connection to timed out");
+    info!("Connection timed out");
 }

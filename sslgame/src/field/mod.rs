@@ -9,13 +9,13 @@ use crate::proto::remote::udp_stream_request::UdpStream;
 use crate::proto::remote::ws_stream_request::WsStream;
 use crate::proto::remote::{UdpStreamRequest, WsStreamRequest, ws_request};
 use crate::visualization_tracker::VisualizationTracker;
-use crate::world_state_filter::WorldStateFilter;
 use crate::{DefaultMaterial, RenderSettings, network_tasks, proto};
 use async_channel::{Receiver, Sender};
 use bevy::math::Vec2;
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
 use std::net::SocketAddr;
+use std::time::Instant;
 use tracing::{debug, info};
 use visualizations::AvailableVisualizations;
 
@@ -44,7 +44,6 @@ pub fn field_plugin(app: &mut App) {
     FieldGeometry,
     AvailableVisualizations,
     SelectedVisualizations,
-    WorldStateFilter,
     VisualizationTracker
 )]
 pub struct Field {
@@ -61,7 +60,7 @@ pub struct FieldHost {
 #[derive(Debug)]
 pub struct FieldConnection {
     pub sender: Sender<ws_request::Content>,
-    receiver: Receiver<UpdatePacket>,
+    receiver: Receiver<(UpdatePacket, Instant)>,
     io_task: Task<()>,
 }
 
@@ -154,20 +153,12 @@ fn receive_field_updates(
         &mut FieldGeometry,
         &mut GameState,
         &mut AvailableVisualizations,
-        &mut WorldStateFilter,
         &mut VisualizationTracker,
         Entity,
     )>,
 ) {
-    for (
-        field,
-        mut geom,
-        mut game_state,
-        mut vis_selection,
-        mut world_state,
-        mut vis_tracker,
-        entity,
-    ) in q_fields.iter_mut()
+    for (field, mut geom, mut game_state, mut vis_selection, mut vis_tracker, entity) in
+        q_fields.iter_mut()
     {
         if field.connection.io_task.is_finished() {
             info!(
@@ -177,7 +168,7 @@ fn receive_field_updates(
             commands.entity(entity).despawn();
             continue;
         }
-        while let Ok(new_packet) = field.connection.receiver.try_recv() {
+        while let Ok((new_packet, rx_time)) = field.connection.receiver.try_recv() {
             // The host should only send geom and game state update when they actually changed, but its still safer to check ourselves
             match new_packet {
                 UpdatePacket::FieldGeom(new_geom) => {
@@ -203,7 +194,10 @@ fn receive_field_updates(
                     vis_selection.visualizations = new_vis_mappings.name;
                 }
                 UpdatePacket::WorldState(new_world_state) => {
-                    world_state.push_packet(new_world_state);
+                    commands.run_system_cached_with(
+                        robots::update_world_state,
+                        (entity, new_world_state, rx_time),
+                    );
                 }
                 UpdatePacket::VisualizationUpdate(vis_update) => {
                     vis_tracker.push_update(vis_update);
