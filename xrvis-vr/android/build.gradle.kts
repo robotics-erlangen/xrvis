@@ -103,11 +103,6 @@ android {
     sourceSets.getByName("main") {
         assets.srcDirs("../../assets")
     }
-
-    // Enable prefab support for directly including the openxr loader
-    buildFeatures {
-        prefab = true
-    }
 }
 
 dependencies {
