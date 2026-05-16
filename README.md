@@ -62,9 +62,9 @@ Build instructions:
 
 ### General
 
-- Protocol extensions for more specific information like game stage, robot battery and errors, debug tree,
+- Protocol extensions for more specific information like ~~game stage~~, robot battery and errors, debug tree,
   simulator/autoref settings, replay control, ...
-- Automatic field alignment using some sort of tracking code (Look at [Meta's implementation](https://developers.meta.com/horizon/documentation/unity/unity-mr-utility-kit-qrcode-detection)?)
+- Automatic field alignment using some sort of tracking code (In VR: [XR_EXT_spatial_marker_tracking](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_EXT_spatial_marker_tracking))
 
 ### Desktop
 
@@ -73,20 +73,19 @@ Build instructions:
 
 ### VR
 
-- Hand pointer + UI Windows for host selection/field spawning, game state, visualization toggles and app settings
+- UI Windows for host selection/field spawning, ~~game state~~, visualization toggles and app settings
 - More control over the host application (Strategy selection, robot management, ...)
-- Robot dragging
+- ~~Robot dragging~~
 - Replays (draw a full virtual field over the real one in passthrough). Also requires a lot of UI work.
-- Controller support
+- ~~Controller support~~
 - Full virtual environments
-- Optional integration with more meta apis. A lot of this is just replicating the [Meta MRUK](https://developers.meta.com/horizon/downloads/package/meta-xr-mr-utility-kit-upm), and that base functionality should be kept in a separate crate.
-    - Better hand interactions ([Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrHandsFB))
-        - Hand mesh + hand occlusion ([Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_hand_tracking_mesh))
-        - Pointer line + System-level pinch detection ([Docs](https://developers.meta.com/horizon/documentation/native/android/mobile-hand-tracking/#hand-state), [Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_hand_tracking_aim))
-    - Controller model rendering ([Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_render_model))
-    - Passthrough occlusion ([Docs](https://developers.meta.com/horizon/documentation/native/android/mobile-depth), [Unity Docs](https://developers.meta.com/horizon/documentation/unity/unity-depthapi-occlusions/), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrPassthroughOcclusion))
-    - Spacial anchors for persistent placement ([Docs](https://developers.meta.com/horizon/documentation/native/android/openxr-spatial-anchors-overview), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrSpatialAnchor), [Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_spatial_entity))
+- Integration with more openxr apis. All non-essential features should be optional and implemented using cross-vendor extensions where possible.
+    - ~~Pointer line + System-level pinch gesture~~ ([XR_EXT_hand_interaction](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_EXT_hand_interaction))
+    - Spacial anchors for persistent placement ([XR_EXT_spatial_anchor](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_EXT_spatial_anchor), [XR_FB_spatial_entity](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_spatial_entity), [Docs](https://developers.meta.com/horizon/documentation/native/android/openxr-spatial-anchors-overview), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrSpatialAnchor))
     - Boundaryless ([Unity Docs](https://developers.meta.com/horizon/documentation/unity/unity-boundaryless), [Unity Note](https://developers.meta.com/horizon/documentation/unity/unity-spatial-anchors-best-practices/#maintaining-consistent-tracking-space), [Guidelines](https://developers.meta.com/horizon/design/boundaryless-best-practices))
-    - Raycast based field placement ([Unity Docs](https://developers.meta.com/horizon/documentation/unity/unity-mr-utility-kit-environment-raycast), [Blog](https://developers.meta.com/horizon/blog/mixed-reality-motif-instant-content-placement-virtual-objects-project-setup))
-    - 90fps ([Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_display_refresh_rate)) +
-      space warp reprojection ([Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrSpaceWarp), [Reference](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_space_warp))
+    - Raycast-based field placement ([XR_META_environment_raycast](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_META_environment_raycast))
+    - Hand mesh + hand occlusion ([XR_FB_hand_tracking_mesh](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_hand_tracking_mesh), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrHandsFB))
+    - Passthrough occlusion ([XR_META_environment_depth](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_META_environment_depth), [Docs](https://developers.meta.com/horizon/documentation/native/android/mobile-depth), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrPassthroughOcclusion))
+    - Controller model rendering ([XR_EXT_interaction_render_model](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_EXT_interaction_render_model), [XR_FB_render_model](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_render_model))
+    - 90fps ([XR_FB_display_refresh_rate](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_display_refresh_rate)) + frame synthesis ([XR_EXT_frame_synthesis](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_EXT_frame_synthesis), [Sample](https://github.com/meta-quest/Meta-OpenXR-SDK/tree/main/Samples/XrSamples/XrSpaceWarp))
+    - Provide the fields and robot cutouts as passthrough projection geometry ([XR_FB_passthrough](https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_FB_passthrough))
