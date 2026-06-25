@@ -147,7 +147,7 @@ pub(crate) fn update_world_state(
                 match render_settings.robots {
                     RobotRenderSettings::Detailed => todo!(),
                     RobotRenderSettings::Fallback => {
-                        new_robot.insert(SceneRoot(
+                        new_robot.insert(WorldAssetRoot(
                             asset_server.load("teams/robots/generic.glb#Scene0"),
                         ));
                     }

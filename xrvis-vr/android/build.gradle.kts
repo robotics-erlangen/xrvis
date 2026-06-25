@@ -2,7 +2,7 @@ import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    id("com.android.application") version "8.13.2"
+    id("com.android.application") version "9.2.1"
 }
 
 // Compile and link the rust project using cargo-ndk.
@@ -47,7 +47,7 @@ keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 android {
     namespace = "de.erforce.xrvis_vr"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
@@ -101,16 +101,15 @@ android {
 
     // Include the bevy asset dir
     sourceSets.getByName("main") {
-        assets.srcDirs("../../assets")
+        assets.directories.add("../../assets")
     }
 }
 
 dependencies {
-    // Held back from 4.0.0 because it has to be matched exactly within the native libs
-    // and android-activity 0.6.0 (used in bevy 0.17) is still stuck at 2.0.2.
-    implementation("androidx.games:games-activity:2.0.2")
+    // Only needed for GameActivity
+    // Has to be matched to the android-activity crate (android-activity 0.6.1 -> games-activity 4.x)
+    //implementation("androidx.games:games-activity:4.4.2")
     // Only used for the @style/Theme.AppCompat.NoActionBar theme in the manifest.
-    // Updating breaks, probably because of the outdated games-activity
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("org.khronos.openxr:openxr_loader_for_android:1.1.53")
+    //implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("org.khronos.openxr:openxr_loader_for_android:1.1.60")
 }

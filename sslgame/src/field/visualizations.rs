@@ -73,7 +73,7 @@ fn update_visualizations(
                         Visualization(vis_id),
                         Transform::default(),
                         Mesh3d(vis_mesh),
-                        MeshMaterial3d(material.translucent.clone()),
+                        MeshMaterial3d(material.opaque.clone()), // TODO: Switch back to translucent. Frustum culling for translucents with NoIndirectDrawing broke in bevy 0.19
                     ));
                 }
 
@@ -95,7 +95,7 @@ fn update_visualizations(
                             rotation: Quat::from_rotation_y(asset_vis.angle.unwrap_or(0.0)),
                             scale: Vec3::ONE,
                         },
-                        SceneRoot(
+                        WorldAssetRoot(
                             // FIXME: Very easy path injection vulnerability (I guess there are already some others but this one seems especially obvious)
                             asset_server.load(format!("vis_assets/{}.glb#Scene0", asset_vis.path)),
                         ),

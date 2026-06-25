@@ -16,11 +16,17 @@
         <meta-data android:name="com.oculus.ossplash" android:value="true"/>
         <meta-data android:name="com.oculus.ossplash.background" android:value="passthrough-contextual" />
 
-        <activity android:name="XrVisGameActivity"
+        <!-- To switch to GameActivity:
+         - ./java/de/erforce/xrvis_vr/XrVisGameActivity.java: public class XrVisGameActivity extends GameActivity { static { System.loadLibrary("xrvis_vr_lib"); } }
+         - android:name="XrVisGameActivity"
+         - android:theme="@style/Theme.AppCompat.NoActionBar"
+         - Add the games-activity and app-compat dependencies in build.gradle.kts -->
+        <activity android:name="android.app.NativeActivity"
             android:exported="true"
             android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode|density"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.AppCompat.NoActionBar">
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <meta-data android:name="android.app.lib_name" android:value="xrvis_vr_lib" /> <!-- For NativeActivity -->
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
