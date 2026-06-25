@@ -7,7 +7,7 @@ use bevy_mod_openxr::exts::OxrExtensions;
 use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
 use bevy_mod_openxr::init::OxrInitPlugin;
 use bevy_mod_openxr::resources::OxrSessionConfig;
-use bevy_mod_openxr::types::EnvironmentBlendMode;
+use bevy_mod_openxr::types::{AppInfo, EnvironmentBlendMode, Version};
 use sslgame::field::Field;
 use sslgame::field::discovery::AvailableHosts;
 use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
@@ -25,8 +25,12 @@ pub fn main() -> AppExit {
     // XR setup
     app.add_plugins(
         // Disabling pipelining improves input latency at the cost of some performance
-        add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
-            OxrInitPlugin {
+        add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>())
+            .set(OxrInitPlugin {
+                app_info: AppInfo {
+                    name: "XrVis".into(),
+                    version: Version(0, 1, 0), // TODO: Parse from env!("CARGO_PKG_VERSION")
+                },
                 exts: {
                     let mut exts = OxrExtensions::default();
                     exts.ext_hand_interaction = true;
