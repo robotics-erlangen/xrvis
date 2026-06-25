@@ -2,6 +2,7 @@ use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::view::NoIndirectDrawing;
+use bevy::window::ExitCondition;
 use bevy_mod_openxr::add_xr_plugins;
 use bevy_mod_openxr::exts::OxrExtensions;
 use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
@@ -39,8 +40,12 @@ pub fn main() -> AppExit {
                     exts
                 },
                 ..default()
-            },
-        ),
+            })
+            .set(WindowPlugin {
+                primary_window: None,
+                exit_condition: ExitCondition::DontExit,
+                ..Default::default()
+            }),
     )
     .insert_resource(OxrSessionConfig {
         blend_mode_preference: vec![
