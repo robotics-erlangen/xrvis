@@ -6,7 +6,7 @@ use bevy::mesh::Mesh;
 use tracing::warn;
 
 const Z_HEIGHT: f32 = 0.01;
-const LINE_WIDTH: f32 = 0.01;
+const DEFAULT_LINE_WIDTH: f32 = 0.01;
 
 /// Builds a single mesh containing all geometry from the visualization list.
 pub fn simple_vis_mesh(
@@ -42,6 +42,12 @@ pub fn simple_vis_mesh(
 fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
     [p_2d.x, Z_HEIGHT, p_2d.y]
 }
+fn border_width(shape: &VisShape) -> f32 {
+    shape
+        .border_style
+        .and_then(|style| style.width)
+        .unwrap_or(DEFAULT_LINE_WIDTH)
+}
 
 fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     let Some(Geom::Circle(c)) = &part.geom else {
@@ -56,7 +62,7 @@ fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
 
     if let Some(fill) = part.fill_color {
         let fill_radius = if part.border_style.is_some() {
-            radius - LINE_WIDTH / 2.0
+            radius - border_width(part) / 2.0
         } else {
             radius
         };
@@ -67,12 +73,12 @@ fn circle_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
         let border_col = bevy_col(border.color.unwrap_or_default());
 
         builder.insert_vertices(with_col(
-            circle_vertices(center, radius - (LINE_WIDTH / 2.), resolution),
+            circle_vertices(center, radius - (border_width(part) / 2.), resolution),
             border_col,
         ));
         builder.quad_loft(
             with_col(
-                circle_vertices(center, radius + (LINE_WIDTH / 2.), resolution),
+                circle_vertices(center, radius + (border_width(part) / 2.), resolution),
                 border_col,
             ),
             true,
@@ -115,17 +121,22 @@ fn polygon_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
         let border_col = bevy_col(border.color.unwrap_or_default());
 
         for point in &poly.point {
-            builder.insert_filled_circle(vis_point(point), LINE_WIDTH / 2.0, 12, border_col);
+            builder.insert_filled_circle(
+                vis_point(point),
+                border_width(part) / 2.0,
+                12,
+                border_col,
+            );
         }
         for edge in poly.point.windows(2) {
             let a = vis_point(&edge[0]);
             let b = vis_point(&edge[1]);
-            builder.insert_path_quad(a, b, LINE_WIDTH, border_col);
+            builder.insert_path_quad(a, b, border_width(part), border_col);
         }
         // Add final closing edge
         let a = poly.point.last().map(vis_point).unwrap();
         let b = poly.point.first().map(vis_point).unwrap();
-        builder.insert_path_quad(a, b, LINE_WIDTH, border_col);
+        builder.insert_path_quad(a, b, border_width(part), border_col);
     }
 }
 
@@ -140,9 +151,19 @@ fn path_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     );
 
     for point in &path.point {
-        builder.insert_filled_circle([point.x, Z_HEIGHT, point.y], LINE_WIDTH / 2.0, 16, color);
+        builder.insert_filled_circle(
+            [point.x, Z_HEIGHT, point.y],
+            border_width(part) / 2.0,
+            16,
+            color,
+        );
     }
     for edge in path.point.windows(2) {
-        builder.insert_path_quad(vis_point(&edge[0]), vis_point(&edge[1]), LINE_WIDTH, color);
+        builder.insert_path_quad(
+            vis_point(&edge[0]),
+            vis_point(&edge[1]),
+            border_width(part),
+            color,
+        );
     }
 }

@@ -112,6 +112,7 @@ message BorderStyle {
 
     optional Style style = 1;
     optional Color color = 2;
+    optional float width = 3;
 }
 
 message Color {
