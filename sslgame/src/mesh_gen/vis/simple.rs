@@ -5,7 +5,7 @@ use crate::{AvailableVisualizations, proto};
 use bevy::mesh::Mesh;
 use tracing::warn;
 
-const Z_HEIGHT: f32 = 0.01;
+const Z_HEIGHT: f32 = 0.005;
 const DEFAULT_LINE_WIDTH: f32 = 0.01;
 
 /// Builds a single mesh containing all geometry from the visualization list.
@@ -92,6 +92,10 @@ fn polygon_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
         return;
     };
 
+    fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
+        [p_2d.x, Z_HEIGHT - 0.001, p_2d.y]
+    }
+
     if poly.point.len() < 3 {
         warn!(
             "Tried to build polygon visualization with less than 3 points.\
@@ -144,6 +148,10 @@ fn path_vis(builder: &mut CustomMeshBuilder, part: &VisShape) {
     let Some(Geom::Path(path)) = &part.geom else {
         return;
     };
+
+    fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
+        [p_2d.x, Z_HEIGHT + 0.001, p_2d.y]
+    }
 
     let color = bevy_col(
         part.fill_color
