@@ -6,8 +6,8 @@ use std::f32::consts::PI;
 
 pub fn game_state_panel_plugin(app: &mut App) {
     app.add_systems(Update, manage_game_state_panels);
-    app.add_systems(Update, update_score_panel);
-    app.add_systems(Update, update_team_panel);
+    //app.add_systems(Update, update_score_panel);
+    //app.add_systems(Update, update_team_panel);
 }
 
 #[allow(clippy::type_complexity)]
@@ -48,7 +48,7 @@ fn manage_game_state_panels(
                         parent.spawn(score_panel(field_entity));
                     },
                 );
-                let team_icon_left = asset_server.load("teams/logos/erforce_light.png");
+                let team_icon_left = asset_server.load("teams/logos/smotsgaming.png");
                 let team_icon_right = team_icon_left.clone();
                 let card_icon_left = asset_server.load("icons/card.png");
                 let card_icon_right = card_icon_left.clone();
@@ -67,6 +67,7 @@ fn manage_game_state_panels(
                             card_icon_left,
                             Team::Yellow,
                             true,
+                            "smots",
                         ));
                     },
                 );
@@ -85,6 +86,7 @@ fn manage_game_state_panels(
                             card_icon_right,
                             Team::Blue,
                             false,
+                            "gaming",
                         ));
                     },
                 );
@@ -191,6 +193,7 @@ fn team_panel(
     card_icon: Handle<Image>,
     team: Team,
     right_aligned: bool,
+    team_name: &str,
 ) -> impl Bundle {
     let flex_direction = if right_aligned {
         FlexDirection::RowReverse
@@ -244,6 +247,11 @@ fn team_panel(
                 Node {
                     height: percent(100.),
                     aspect_ratio: Some(1.),
+                    margin: if right_aligned {
+                        UiRect::left(px(20.))
+                    } else {
+                        UiRect::right(px(20.))
+                    },
                     ..default()
                 }
             ),
@@ -256,7 +264,7 @@ fn team_panel(
                     ..default()
                 },
                 children![
-                    (Text::new("ER-Force"), TextFont::from_font_size(14.)),
+                    (Text::new(team_name), TextFont::from_font_size(14.)),
                     (
                         Node {
                             height: px(10.),
