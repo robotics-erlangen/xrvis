@@ -1,6 +1,5 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
-use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::ecs::system::SystemParam;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -84,14 +83,14 @@ impl XrPanelSpawner<'_> {
     /// The physical size of the panel is determined by the `x` and `y` components of the `transform` scale (in meters).
     /// The render resolution is calculated based on the physical size and the `XrPanelResolution` resource.
     ///
-    /// The `ui_spawner` closure is used to build the UI hierarchy by spawning children under an
-    /// automatically generated root node that covers the entire panel.
+    /// The `ui_scene` is spawned as the root UI node, but that is separate from the `background_color`,
+    /// which only affects the texture target clear color and alpha mode.
     pub fn spawn_panel(
         &mut self,
         commands: &mut Commands,
         transform: Transform,
         background_color: Color,
-        ui_spawner: impl FnOnce(&mut RelatedSpawnerCommands<ChildOf>),
+        ui_scene: impl Scene,
     ) -> Entity {
         let mut image = Image::new_fill(
             Extent3d {
@@ -138,18 +137,9 @@ impl XrPanelSpawner<'_> {
             .id();
 
         let ui_root = commands
-            .spawn((
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                UiTargetCamera(ui_cam),
-            ))
+            .queue_spawn_scene(ui_scene)
+            .insert(UiTargetCamera(ui_cam))
             .add_child(ui_cam)
-            .with_children(ui_spawner)
             .id();
 
         let display_panel = commands
