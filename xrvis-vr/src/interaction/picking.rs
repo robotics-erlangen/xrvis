@@ -1,5 +1,4 @@
 use crate::interaction::input::{LeftHandPointer, PointerActions, RightHandPointer};
-use crate::panels::{XrPanel, XrUiRoot};
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};
@@ -12,6 +11,7 @@ use bevy::prelude::*;
 use schminput::BoolActionValue;
 use sslgame::field::robots::Robot;
 use sslgame::field::{Field, FieldGeometry, Team};
+use sslgame::panels::{SpatialPanel, SpatialUiRoot};
 use sslgame::proto::remote::{RobotMoveCommand, ws_request};
 use std::ops::Range;
 use std::time::Instant;
@@ -126,8 +126,8 @@ pub fn drive_ui_pointers(
     // Pointers
     pointers: Query<(&XrPointer, &PointerId, &PointerLocation, &PointerPress)>,
     // Panels
-    panels: Query<&GlobalTransform, With<XrPanel>>,
-    ui_roots: Query<(&UiTargetCamera, &XrUiRoot)>,
+    panels: Query<&GlobalTransform, With<SpatialPanel>>,
+    ui_roots: Query<(&UiTargetCamera, &SpatialUiRoot)>,
     render_targets: Query<&RenderTarget>,
     image_assets: Res<Assets<Image>>,
     // Events
@@ -144,7 +144,7 @@ pub fn drive_ui_pointers(
         // Collect pointer hits by looking up the 3d panel for each UI root.
         // Not doing it the other way around because their relationship only
         // enforces that every ui root has a panel, not the other direction.
-        for (ui_cam, &XrUiRoot(panel)) in ui_roots {
+        for (ui_cam, &SpatialUiRoot(panel)) in ui_roots {
             // Query the render target of the ui camera
             let (render_target, texture_size) =
                 if let Ok(RenderTarget::Image(img_target)) = render_targets.get(ui_cam.entity()) {

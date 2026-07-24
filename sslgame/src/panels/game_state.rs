@@ -1,7 +1,7 @@
-use crate::panels::{XrPanelAnchor, XrPanelSpawner};
+use crate::field::{FieldGeometry, GameState, Team};
+use crate::panels::{SpatialPanelAnchor, SpatialPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
-use sslgame::field::{FieldGeometry, GameState, Team};
 use std::f32::consts::PI;
 
 pub fn game_state_panel_plugin(app: &mut App) {
@@ -13,10 +13,10 @@ pub fn game_state_panel_plugin(app: &mut App) {
 #[allow(clippy::type_complexity)]
 fn manage_game_state_panels(
     mut commands: Commands,
-    mut panel_spawner: XrPanelSpawner,
+    mut panel_spawner: SpatialPanelSpawner,
     (q_fields, mut q_panels): (
-        Query<(&Transform, Ref<FieldGeometry>, Entity), Without<XrPanelAnchor>>,
-        Query<(&mut Transform, &ChildOf), With<XrPanelAnchor>>,
+        Query<(&Transform, Ref<FieldGeometry>, Entity), Without<SpatialPanelAnchor>>,
+        Query<(&mut Transform, &ChildOf), With<SpatialPanelAnchor>>,
     ),
 ) {
     for (field_transform, field_geom, field_entity) in q_fields {
@@ -76,7 +76,7 @@ fn manage_game_state_panels(
                                         + 0.1),
                         )
                         .looking_at(Vec3::ZERO, Vec3::Y),
-                        XrPanelAnchor,
+                        SpatialPanelAnchor,
                     ))
                     .add_children(&[score_panel, left_panel, right_panel])
                     .id();

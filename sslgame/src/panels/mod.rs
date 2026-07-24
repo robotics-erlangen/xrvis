@@ -7,7 +7,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, T
 
 pub mod game_state;
 
-pub fn xr_panel_plugin(app: &mut App) {
+pub fn spatial_panel_plugin(app: &mut App) {
     // Build a 1x1, -z forward, plane with mirrored uvs,
     // x-mirror because of the negative normal axis (-> "viewed from behind"),
     // y-mirror because y is down in UI coordinates
@@ -32,52 +32,52 @@ pub fn xr_panel_plugin(app: &mut App) {
             vec![[1., 1.], [1., 0.], [0., 1.], [0., 0.]],
         ),
     );
-    app.insert_resource(XrPanelMesh(mesh_handle));
+    app.insert_resource(SpatialPanelMesh(mesh_handle));
 
     // 1000 res -> 1pixel=1mm, 10x scale -> 1unit=1cm
     app.insert_resource(UiScale(10.));
-    app.insert_resource(XrPanelResolution {
+    app.insert_resource(SpatialPanelResolution {
         pixels_per_meter: 1000.,
     });
 }
 
-/// Marks the display mesh of an xr panel, and references the root of its UI hierarchy.
+/// Marks the display mesh of a spatial panel, and references the root of its UI hierarchy.
 ///
 /// This separation is necessary because UI nodes can't have non-UI parents (or they won't be recognized as roots and won't be rendered),
 /// but anchoring panels to other objects is a common usecase that requires the anchor as the parent.
 #[derive(Component, Debug)]
-#[relationship_target(relationship = XrUiRoot, linked_spawn)]
-pub struct XrPanel(Entity);
+#[relationship_target(relationship = SpatialUiRoot, linked_spawn)]
+pub struct SpatialPanel(Entity);
 
 /// Marks the root of a UI node that is rendering to the referenced panel.
 ///
 /// This separation is necessary because UI nodes can't have non-UI parents (or they won't be recognized as roots and won't be rendered),
 /// but anchoring panels to other objects is a common usecase that requires the anchor as the parent.
 #[derive(Component, Debug)]
-#[relationship(relationship_target = XrPanel)]
-pub struct XrUiRoot(pub Entity);
+#[relationship(relationship_target = SpatialPanel)]
+pub struct SpatialUiRoot(pub Entity);
 
 /// Marker component to find entities used to anchor multiple panels.
 #[derive(Component, Debug)]
-pub struct XrPanelAnchor;
+pub struct SpatialPanelAnchor;
 
 #[derive(Resource, Debug, Deref)]
-struct XrPanelMesh(Handle<Mesh>);
+struct SpatialPanelMesh(Handle<Mesh>);
 
 #[derive(Resource, Clone, Copy, Debug, Deref)]
-pub struct XrPanelResolution {
+pub struct SpatialPanelResolution {
     pub pixels_per_meter: f32,
 }
 
 #[derive(SystemParam)]
-pub struct XrPanelSpawner<'w> {
-    panel_mesh: Res<'w, XrPanelMesh>,
-    panel_res: Res<'w, XrPanelResolution>,
+pub struct SpatialPanelSpawner<'w> {
+    panel_mesh: Res<'w, SpatialPanelMesh>,
+    panel_res: Res<'w, SpatialPanelResolution>,
     image_assets: ResMut<'w, Assets<Image>>,
     material_assets: ResMut<'w, Assets<StandardMaterial>>,
 }
 
-impl XrPanelSpawner<'_> {
+impl SpatialPanelSpawner<'_> {
     /// Spawns a new spatial UI panel.
     ///
     /// The physical size of the panel is determined by the `x` and `y` components of the `transform` scale (in meters).
@@ -148,7 +148,7 @@ impl XrPanelSpawner<'_> {
                 MeshMaterial3d(material_handle),
                 transform,
             ))
-            .add_one_related::<XrUiRoot>(ui_root)
+            .add_one_related::<SpatialUiRoot>(ui_root)
             .id();
 
         #[allow(clippy::let_and_return)]

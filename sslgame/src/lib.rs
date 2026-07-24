@@ -7,6 +7,7 @@ mod depth_mask_material;
 pub mod field;
 mod mesh_gen;
 mod network_tasks;
+pub mod panels;
 mod transform_filter;
 mod visualization_tracker;
 
