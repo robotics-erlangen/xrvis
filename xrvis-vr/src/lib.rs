@@ -126,15 +126,14 @@ fn spawn_new_hosts(
     available_hosts: Res<AvailableHosts>,
     q_spawned_field: Option<Single<(&Field, Entity)>>,
 ) {
-    let new_hosts = &available_hosts.0;
+    let mut new_hosts = available_hosts.available();
 
-    if let Some(new_host) = new_hosts.iter().next() {
+    if let Some(new_host) = new_hosts.next() {
         match q_spawned_field.as_deref() {
             // Replace the field if it is not one of the new hosts, but a different one is there to replace it
             Some((field, entity))
-                if !new_hosts
-                    .iter()
-                    .any(|h| field.host.websocket_addr == h.websocket_addr) =>
+                if field.host.websocket_addr != new_host.websocket_addr
+                    && !new_hosts.any(|h| field.host.websocket_addr == h.websocket_addr) =>
             {
                 commands.entity(*entity).despawn();
                 commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));

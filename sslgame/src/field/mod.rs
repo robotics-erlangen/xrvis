@@ -2,6 +2,7 @@ pub mod discovery;
 pub mod robots;
 pub mod visualizations;
 
+use crate::field::discovery::AvailableHosts;
 use crate::field::visualizations::SelectedVisualizations;
 use crate::mesh_gen::field::field_mesh;
 use crate::network_tasks::UpdatePacket;
@@ -148,6 +149,7 @@ impl Default for FieldGeometry {
 
 fn receive_field_updates(
     mut commands: Commands,
+    mut available_hosts: ResMut<AvailableHosts>,
     mut q_fields: Query<(
         &Field,
         &mut FieldGeometry,
@@ -165,6 +167,7 @@ fn receive_field_updates(
                 "Connection to {} closed, despawning field entities",
                 field.host.websocket_addr
             );
+            available_hosts.dropped.insert(field.host.clone());
             commands.entity(entity).despawn();
             continue;
         }

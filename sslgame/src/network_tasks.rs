@@ -41,14 +41,9 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
 
     // Forward discovery packets and check for new network interfaces every 3 seconds
     let mut active_interfaces = Vec::new();
-    let mut next_interface_refresh = Instant::now();
+    let mut next_refresh = Instant::now();
     loop {
-        next_interface_refresh += Duration::from_secs(3);
-        // Forget old hosts
-        {
-            let cutoff = Instant::now() - Duration::from_secs(3);
-            host_map.retain(|_, (t, _, _)| *t > cutoff);
-        }
+        next_refresh += Duration::from_secs(3);
 
         // ======== Update multicast subscriptions ========
 
@@ -100,13 +95,41 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
         let stream_v4 = make_packet_stream(&socket_v4);
         let stream_v6 = make_packet_stream(&socket_v6);
         let stream_timeout = stream::once_future(async {
-            async_io::Timer::at(next_interface_refresh).await;
+            async_io::Timer::at(next_refresh).await;
             Err(io::ErrorKind::TimedOut.into())
         });
 
         let mut merged_stream = stream_v4.or(stream_v6).or(stream_timeout).boxed();
 
         // ======== Collect packets from the merged stream until the timeout ========
+
+        /// Prunes and sends the host list to the host discovery channel.
+        fn send_host_list(
+            channel: &Sender<Vec<(SocketAddr, HostAdvertisement)>>,
+            host_map: &mut HashMap<HostKey, (Instant, SocketAddr, HostAdvertisement)>,
+        ) -> Result<(), ()> {
+            // Forget old hosts
+            let cutoff = Instant::now() - Duration::from_secs(3);
+            host_map.retain(|_, (t, _, _)| *t > cutoff);
+
+            // Convert to vec
+            let host_list: Vec<_> = host_map
+                .iter()
+                .map(|(_, (_, a, h))| (*a, h.clone()))
+                .collect();
+
+            match channel.try_send(host_list) {
+                Ok(_) => Ok(()),
+                Err(TrySendError::Full(_)) => {
+                    warn!("Host discovery channel full");
+                    Ok(())
+                }
+                Err(TrySendError::Closed(_)) => {
+                    info!("Host discovery channel dropped, stopping discovery task");
+                    Err(())
+                }
+            }
+        }
 
         loop {
             match merged_stream
@@ -142,18 +165,9 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
                         }
                     }
 
-                    let host_list: Vec<_> = host_map
-                        .iter()
-                        .map(|(_, (_, a, h))| (*a, h.clone()))
-                        .collect();
-
-                    match hosts_out.try_send(host_list) {
-                        Ok(_) => {}
-                        Err(TrySendError::Full(_)) => warn!("Host discovery channel full"),
-                        Err(TrySendError::Closed(_)) => {
-                            info!("Host discovery channel dropped, stopping discovery task");
-                            return;
-                        }
+                    // Send update immediately when receiving a packet to avoid connection delays
+                    if send_host_list(&hosts_out, &mut host_map).is_err() {
+                        return;
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::TimedOut => break,
@@ -162,6 +176,11 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
                     return;
                 }
             }
+        }
+
+        // Also send after each refresh to catch the last connection dropping
+        if send_host_list(&hosts_out, &mut host_map).is_err() {
+            return;
         }
     }
 }
@@ -207,10 +226,10 @@ pub async fn io_task(
     // Start websocket connection
     let tcp_stream = async_net::TcpStream::connect(host)
         .await
-        .unwrap_or_else(|_| panic!("Failed tcp connection to {host}"));
+        .unwrap_or_else(|e| panic!("Failed tcp connection to {host}: {e}"));
     let (websocket, _) = async_tungstenite::client_async(format!("ws://{host}"), tcp_stream)
         .await
-        .unwrap_or_else(|_| panic!("Failed websocket connection to {host}"));
+        .unwrap_or_else(|e| panic!("Failed websocket connection to {host}: {e}"));
     let (mut ws_sender, ws_receiver) = websocket.split();
 
     // Bind udp socket to any free port

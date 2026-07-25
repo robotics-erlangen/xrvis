@@ -14,7 +14,23 @@ pub fn field_discovery_plugin(app: &mut App) {
 }
 
 #[derive(Resource, Debug, Default)]
-pub struct AvailableHosts(pub HashSet<FieldHost>);
+pub struct AvailableHosts {
+    pub(crate) discovered: HashSet<FieldHost>,
+    /// All hosts that were dropped because of websocket exits since the last discovery update.\
+    /// This separation is necessary because a field might be despawned just after the discovery received
+    /// its advertisement for this cycle, causing it to still be included in the next update.
+    /// The `dropped` list can be used to filter for these zombie connections and also
+    /// communicate the disconnect to users immediately, before the next discovery update
+    /// (changes to `dropped` also trigger change detection).
+    pub(crate) dropped: HashSet<FieldHost>,
+}
+
+impl AvailableHosts {
+    /// Gets all currently available hosts, correctly handling all types of disconnects.
+    pub fn available(&self) -> impl Iterator<Item = &FieldHost> {
+        self.discovered.iter().filter(|h| !self.dropped.contains(h))
+    }
+}
 
 #[derive(Resource, Debug)]
 struct HostDiscoveryTask {
@@ -46,11 +62,18 @@ fn receive_host_advertisements(
                             hostname: adv.hostname,
                         }
                     })
+                    // Skip any hosts that might have been dropped after their advertisement was already received in this discovery cycle.
+                    .filter(|h| !available_hosts.dropped.contains(h))
                     .collect::<HashSet<_>>();
 
-                // Only update the resource (and trigger change detection) when the hosts have actually changed
-                if new_hosts != available_hosts.0 {
-                    available_hosts.0 = new_hosts;
+                // The dropped list can't affect the next discovery, so it can be cleared.
+                // Only mut deref the resource (and trigger change detection) when the hosts have actually changed
+                if !available_hosts.dropped.is_empty() {
+                    available_hosts.dropped.clear();
+                }
+
+                if new_hosts != available_hosts.discovered {
+                    available_hosts.discovered = new_hosts;
                 }
             }
         }
