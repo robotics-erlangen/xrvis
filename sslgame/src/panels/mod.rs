@@ -57,10 +57,6 @@ pub struct SpatialPanel(Entity);
 #[relationship(relationship_target = SpatialPanel)]
 pub struct SpatialUiRoot(pub Entity);
 
-/// Marker component to find entities used to anchor multiple panels.
-#[derive(Component, Debug)]
-pub struct SpatialPanelAnchor;
-
 #[derive(Resource, Debug, Deref)]
 struct SpatialPanelMesh(Handle<Mesh>);
 

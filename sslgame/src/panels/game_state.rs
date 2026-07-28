@@ -1,5 +1,5 @@
 use crate::field::{FieldGeometry, GameState, Team};
-use crate::panels::{SpatialPanelAnchor, SpatialPanelSpawner};
+use crate::panels::SpatialPanelSpawner;
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
 use std::f32::consts::PI;
@@ -10,13 +10,17 @@ pub fn game_state_panel_plugin(app: &mut App) {
     app.add_systems(Update, update_team_panel);
 }
 
+#[derive(Component, Clone, Debug, Default)]
+struct FieldSidePanelAnchor;
+
+/// Spawns score and team panels next to every field
 #[allow(clippy::type_complexity)]
 fn manage_game_state_panels(
     mut commands: Commands,
     mut panel_spawner: SpatialPanelSpawner,
     (q_fields, mut q_panels): (
-        Query<(&Transform, Ref<FieldGeometry>, Entity), Without<SpatialPanelAnchor>>,
-        Query<(&mut Transform, &ChildOf), With<SpatialPanelAnchor>>,
+        Query<(&Transform, Ref<FieldGeometry>, Entity), Without<FieldSidePanelAnchor>>,
+        Query<(&mut Transform, &ChildOf), With<FieldSidePanelAnchor>>,
     ),
 ) {
     for (field_transform, field_geom, field_entity) in q_fields {
@@ -76,7 +80,7 @@ fn manage_game_state_panels(
                                         + 0.1),
                         )
                         .looking_at(Vec3::ZERO, Vec3::Y),
-                        SpatialPanelAnchor,
+                        FieldSidePanelAnchor,
                     ))
                     .add_children(&[score_panel, left_panel, right_panel])
                     .id();
