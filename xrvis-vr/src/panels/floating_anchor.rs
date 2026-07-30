@@ -62,8 +62,9 @@ pub struct FloatingPanelAnchor;
 #[derive(Component, Clone, Debug, Default)]
 #[require(Transform)]
 struct FloatingAnchorBase {
-    moving: bool,
+    pos_target: Vec2,
     pos_vel: Vec2,
+    rot_target: f32,
     rot_vel: f32,
 }
 
@@ -125,33 +126,45 @@ fn move_floating_anchor(
     let head_transform = views[0].pose.to_transform();
     let (mut base, mut base_transform) = anchor.into_inner();
 
-    let pos_diff = head_transform.translation.xz() - base_transform.translation.xz();
-    let pos_diff_len = pos_diff.length();
-    let anchor_angle = base_transform.rotation.to_euler(EulerRot::YXZ).0;
-    let head_angle = head_transform.rotation.to_euler(EulerRot::YXZ).0;
-    let angle_diff = (head_angle - anchor_angle + PI).rem_euclid(2.0 * PI) - PI;
+    let head_pos = head_transform.translation.xz();
+    let base_pos = base_transform.translation.xz();
 
-    if base.moving {
-        let damping = settings.spring_damping;
-        let stiffness = settings.spring_stiffness;
-        let mass = settings.spring_mass;
-        let spring_accel = (pos_diff * stiffness - base.pos_vel * damping) / mass;
-        let rot_accel = (angle_diff * stiffness - base.rot_vel * damping) / mass;
+    // Compute yaw
+    let head_dir = head_transform.forward();
+    let head_yaw = f32::atan2(-head_dir.x, -head_dir.z);
+    let base_dir = base_transform.forward();
+    let base_yaw = f32::atan2(-base_dir.x, -base_dir.z);
 
-        let dt = time.delta_secs();
-        base.pos_vel += spring_accel * dt;
-        base.rot_vel += rot_accel * dt;
-        base_transform.translation += Vec3::new(base.pos_vel.x, 0.0, base.pos_vel.y) * dt;
-        base_transform.rotate_y(base.rot_vel * dt);
+    let target_dir_2d = Vec2::from_angle(base.rot_target);
+    let head_dir_2d = Vec2::from_angle(head_yaw);
+    let base_dir_2d = Vec2::from_angle(base_yaw);
 
-        let pos_settled = pos_diff_len < 0.1 && base.pos_vel.length() < 0.01;
-        let angle_settled = angle_diff.abs() < 0.1 && base.rot_vel.abs() < 0.01;
-        if pos_settled && angle_settled {
-            base.moving = false;
-            base.pos_vel = Vec2::ZERO;
-            base.rot_vel = 0.0;
-        }
-    } else if pos_diff_len > settings.pos_deadzone || angle_diff.abs() > settings.rot_deadzone {
-        base.moving = true;
+    let target_rot_diff = target_dir_2d.angle_to(head_dir_2d);
+    let base_rot_diff = base_dir_2d.angle_to(target_dir_2d);
+
+    // Check deadzones, but also allow target changes while already moving
+    let move_exceeded = base.pos_vel.length_squared() > 0.2
+        || base.pos_target.distance(head_pos) > settings.pos_deadzone;
+    let rotate_exceeded = base.rot_vel.abs() > 0.5 || target_rot_diff.abs() > settings.rot_deadzone;
+
+    if move_exceeded || rotate_exceeded {
+        // Will only take effect in the next frame
+        base.pos_target = head_pos;
+        base.rot_target = head_yaw;
     }
+
+    // Spring physics calculation
+    let pos_diff = base.pos_target - base_pos;
+
+    let damping = settings.spring_damping;
+    let stiffness = settings.spring_stiffness;
+    let mass = settings.spring_mass;
+    let spring_accel = (pos_diff * stiffness - base.pos_vel * damping) / mass;
+    let rot_accel = (base_rot_diff * stiffness - base.rot_vel * damping) / mass;
+
+    let dt = time.delta_secs();
+    base.pos_vel += spring_accel * dt;
+    base.rot_vel += rot_accel * dt;
+    base_transform.translation += Vec3::new(base.pos_vel.x, 0.0, base.pos_vel.y) * dt;
+    base_transform.rotate_y(base.rot_vel * dt);
 }
