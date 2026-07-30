@@ -49,7 +49,7 @@ pub fn ssl_game_plugin(app: &mut App) {
     );
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum RobotRenderSettings {
     #[default]
     Detailed,

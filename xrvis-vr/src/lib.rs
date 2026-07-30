@@ -13,10 +13,11 @@ use sslgame::field::Field;
 use sslgame::field::discovery::AvailableHosts;
 use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
 use sslgame::proto::remote::VisualizationFilter;
-use sslgame::{panels, ssl_game_plugin};
+use sslgame::ssl_game_plugin;
 
 mod interaction;
 mod interaction_old;
+mod panels;
 
 #[bevy_main]
 pub fn main() -> AppExit {
@@ -84,8 +85,10 @@ pub fn main() -> AppExit {
         )
         .add_plugins(interaction_old::old_interaction_plugin)
         .add_plugins(interaction::interaction_plugins)
-        .add_plugins(panels::spatial_panel_plugin)
-        .add_plugins(panels::game_state::game_state_panel_plugin)
+        .add_plugins(sslgame::panels::spatial_panel_plugin)
+        .add_plugins(sslgame::panels::game_state::game_state_panel_plugin)
+        .add_plugins(panels::floating_anchor::floating_anchor_plugin)
+        .add_plugins(panels::global_settings::global_settings_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
         .add_systems(

@@ -1,13 +1,18 @@
 use crate::field::{FieldGeometry, GameState, Team};
-use crate::panels::SpatialPanelSpawner;
+use crate::panels::{SpatialPanelScaling, SpatialPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
 pub fn game_state_panel_plugin(app: &mut App) {
-    app.add_systems(Update, manage_game_state_panels);
-    app.add_systems(Update, update_score_panel);
-    app.add_systems(Update, update_team_panel);
+    app.add_systems(
+        Update,
+        (
+            manage_game_state_panels,
+            update_score_panel,
+            update_team_panel,
+        ),
+    );
 }
 
 #[derive(Component, Clone, Debug, Default)]
@@ -38,7 +43,12 @@ fn manage_game_state_panels(
                 anchor_transform.look_at(Vec3::ZERO, Vec3::Y);
             }
             None => {
-                // Spawn new panel
+                let scaling = SpatialPanelScaling {
+                    physical_px_per_meter: 500.0,
+                    logical_px_per_meter: 100.0,
+                };
+
+                // Spawn new panels
                 let score_panel = panel_spawner.spawn_panel(
                     &mut commands,
                     Transform {
@@ -46,6 +56,7 @@ fn manage_game_state_panels(
                         rotation: Quat::from_rotation_x(PI / 6.),
                         scale: Vec3::new(0.5, 0.5, 1.),
                     },
+                    scaling,
                     Color::srgba(0., 0., 0., 0.),
                     score_panel(field_entity),
                 );
@@ -56,6 +67,7 @@ fn manage_game_state_panels(
                         rotation: Quat::from_rotation_x(PI / 6.),
                         scale: Vec3::new(1.5, 0.5, 1.),
                     },
+                    scaling,
                     Color::srgba(0., 0., 0., 0.),
                     team_panel(field_entity, Team::Yellow, true),
                 );
@@ -66,6 +78,7 @@ fn manage_game_state_panels(
                         rotation: Quat::from_rotation_x(PI / 6.),
                         scale: Vec3::new(1.5, 0.5, 1.),
                     },
+                    scaling,
                     Color::srgba(0., 0., 0., 0.),
                     team_panel(field_entity, Team::Blue, false),
                 );

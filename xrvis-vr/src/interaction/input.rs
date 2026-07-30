@@ -2,11 +2,13 @@ use bevy::prelude::*;
 use schminput::prelude::*;
 
 #[derive(Resource, Clone, Copy, Debug)]
-pub struct PointerActions {
+pub struct InputActions {
     pub left_aim_pose: Entity,
     pub right_aim_pose: Entity,
     pub left_aim_activate: Entity,
     pub right_aim_activate: Entity,
+
+    pub menu_press: Entity,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -90,10 +92,21 @@ fn setup_oxr_schminput(mut commands: Commands) {
         ))
         .id();
 
-    commands.insert_resource(PointerActions {
+    // ======== Button actions ========
+
+    let menu_press = commands
+        .spawn((
+            Action::new("menu_press", "Menu Press", pointer_set),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/menu/click"]),
+            BoolActionValue::new(),
+        ))
+        .id();
+
+    commands.insert_resource(InputActions {
         left_aim_pose,
         right_aim_pose,
         left_aim_activate,
         right_aim_activate,
+        menu_press,
     });
 }

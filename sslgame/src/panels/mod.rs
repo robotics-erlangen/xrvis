@@ -1,9 +1,10 @@
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::RenderTarget;
+use bevy::camera::{ImageRenderTarget, RenderTarget};
 use bevy::ecs::system::SystemParam;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+use std::ops::DerefMut;
 
 pub mod game_state;
 
@@ -33,12 +34,7 @@ pub fn spatial_panel_plugin(app: &mut App) {
         ),
     );
     app.insert_resource(SpatialPanelMesh(mesh_handle));
-
-    // 1000 res -> 1pixel=1mm, 10x scale -> 1unit=1cm
-    app.insert_resource(UiScale(10.));
-    app.insert_resource(SpatialPanelResolution {
-        pixels_per_meter: 1000.,
-    });
+    app.add_systems(PostUpdate, apply_panel_scaling);
 }
 
 /// Marks the display mesh of a spatial panel, and references the root of its UI hierarchy.
@@ -60,15 +56,17 @@ pub struct SpatialUiRoot(pub Entity);
 #[derive(Resource, Debug, Deref)]
 struct SpatialPanelMesh(Handle<Mesh>);
 
-#[derive(Resource, Clone, Copy, Debug, Deref)]
-pub struct SpatialPanelResolution {
-    pub pixels_per_meter: f32,
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SpatialPanelScaling {
+    /// Resolution of the render target
+    pub physical_px_per_meter: f32,
+    /// Resolution of the px() unit
+    pub logical_px_per_meter: f32,
 }
 
 #[derive(SystemParam)]
 pub struct SpatialPanelSpawner<'w> {
     panel_mesh: Res<'w, SpatialPanelMesh>,
-    panel_res: Res<'w, SpatialPanelResolution>,
     image_assets: ResMut<'w, Assets<Image>>,
     material_assets: ResMut<'w, Assets<StandardMaterial>>,
 }
@@ -85,13 +83,14 @@ impl SpatialPanelSpawner<'_> {
         &mut self,
         commands: &mut Commands,
         transform: Transform,
+        scaling: SpatialPanelScaling,
         background_color: Color,
         ui_scene: impl Scene,
     ) -> Entity {
         let mut image = Image::new_fill(
             Extent3d {
-                width: (transform.scale.x * self.panel_res.pixels_per_meter) as u32,
-                height: (transform.scale.y * self.panel_res.pixels_per_meter) as u32,
+                width: (transform.scale.x * scaling.physical_px_per_meter) as u32,
+                height: (transform.scale.y * scaling.physical_px_per_meter) as u32,
                 ..default()
             },
             TextureDimension::D2,
@@ -128,12 +127,15 @@ impl SpatialPanelSpawner<'_> {
                     clear_color: ClearColorConfig::Custom(background_color),
                     ..default()
                 },
-                RenderTarget::Image(image_handle.into()),
+                RenderTarget::Image(ImageRenderTarget {
+                    handle: image_handle,
+                    scale_factor: scaling.physical_px_per_meter / scaling.logical_px_per_meter,
+                }),
             ))
             .id();
 
         let ui_root = commands
-            .queue_spawn_scene(ui_scene)
+            .spawn_scene(ui_scene)
             .insert(UiTargetCamera(ui_cam))
             .add_child(ui_cam)
             .id();
@@ -143,11 +145,53 @@ impl SpatialPanelSpawner<'_> {
                 Mesh3d(mesh_handle),
                 MeshMaterial3d(material_handle),
                 transform,
+                scaling,
             ))
             .add_one_related::<SpatialUiRoot>(ui_root)
             .id();
 
         #[allow(clippy::let_and_return)]
         display_panel
+    }
+}
+
+/// Applies changes to `SpatialPanelScaling` to the texture target and ui camera
+#[allow(clippy::type_complexity)]
+fn apply_panel_scaling(
+    mut panels: Query<(
+        Ref<SpatialPanelScaling>,
+        Ref<Transform>,
+        &MeshMaterial3d<StandardMaterial>,
+        &SpatialPanel,
+    )>,
+    ui_roots: Query<&UiTargetCamera, With<SpatialUiRoot>>,
+    mut ui_cameras: Query<&mut RenderTarget>,
+    mut image_assets: ResMut<Assets<Image>>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
+) {
+    for (scaling, transform, material, ui_root_ref) in panels.iter_mut() {
+        let scaling_changed = scaling.is_changed() && !scaling.is_added();
+        let transform_changed = transform.is_changed() && !transform.is_added();
+        if !(scaling_changed || transform_changed) {
+            continue;
+        }
+
+        // Get render target + target image asset
+        let ui_cam_ref = ui_roots.get(ui_root_ref.0).unwrap();
+        let ui_cam_target = ui_cameras.get_mut(ui_cam_ref.0).unwrap();
+        let RenderTarget::Image(image_target) = ui_cam_target.into_inner() else {
+            continue;
+        };
+        let mut image = image_assets.get_mut(&image_target.handle).unwrap();
+
+        // Resize image + update target scale
+        image.resize(Extent3d {
+            width: (transform.scale.x * scaling.physical_px_per_meter) as u32,
+            height: (transform.scale.y * scaling.physical_px_per_meter) as u32,
+            ..default()
+        });
+        image_target.scale_factor = scaling.physical_px_per_meter / scaling.logical_px_per_meter;
+        // Manually trigger change detection on the material to update the gpu resources
+        std::hint::black_box(material_assets.get_mut(&material.0).unwrap().deref_mut());
     }
 }

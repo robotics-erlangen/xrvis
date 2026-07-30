@@ -10,7 +10,7 @@ name = "xrvis_vr_lib"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-bevy = { workspace = true, features = ["android-native-activity"] }
+bevy = { workspace = true, features = ["android-native-activity", "bevy_feathers"] }
 bevy_mod_openxr.workspace = true
 bevy_mod_xr.workspace = true
 schminput.workspace = true

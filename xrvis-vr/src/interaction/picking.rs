@@ -1,4 +1,4 @@
-use crate::interaction::input::{LeftHandPointer, PointerActions, RightHandPointer};
+use crate::interaction::input::{InputActions, LeftHandPointer, RightHandPointer};
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};
@@ -92,7 +92,7 @@ impl XrPointer {
 
 pub fn update_hand_pointer_rays(
     mut gizmos: Gizmos,
-    pointer_actions: Res<PointerActions>,
+    pointer_actions: Res<InputActions>,
     action_values: Query<&BoolActionValue>,
     pointers: Query<(&mut XrPointer, &PointerId, &GlobalTransform)>,
 ) {
@@ -126,7 +126,7 @@ pub fn drive_ui_pointers(
     // Pointers
     pointers: Query<(&XrPointer, &PointerId, &PointerLocation, &PointerPress)>,
     // Panels
-    panels: Query<&GlobalTransform, With<SpatialPanel>>,
+    panels: Query<(&GlobalTransform, Option<&InheritedVisibility>), With<SpatialPanel>>,
     ui_roots: Query<(&UiTargetCamera, &SpatialUiRoot)>,
     render_targets: Query<&RenderTarget>,
     image_assets: Res<Assets<Image>>,
@@ -146,12 +146,13 @@ pub fn drive_ui_pointers(
         // enforces that every ui root has a panel, not the other direction.
         for (ui_cam, &SpatialUiRoot(panel)) in ui_roots {
             // Query the render target of the ui camera
-            let (render_target, texture_size) =
+            let (render_target, texture_size, scale_factor) =
                 if let Ok(RenderTarget::Image(img_target)) = render_targets.get(ui_cam.entity()) {
                     let image = image_assets.get(&img_target.handle).unwrap();
                     (
                         NormalizedRenderTarget::Image(img_target.clone()),
                         image.size(),
+                        img_target.scale_factor,
                     )
                 } else {
                     warn!(
@@ -162,7 +163,12 @@ pub fn drive_ui_pointers(
                 };
 
             // Get the transform of the display mesh (the physical panel)
-            let panel_transform = panels.get(panel).unwrap();
+            let (panel_transform, panel_visibility) = panels.get(panel).unwrap();
+
+            // Skip hidden panels
+            if !panel_visibility.is_none_or(|v| v.get()) {
+                continue;
+            }
 
             // Invert x because the panel is viewed from -z (-z "forward" normal),
             // which would make it x-left with bevy's right-handed coordinate system.
@@ -177,8 +183,10 @@ pub fn drive_ui_pointers(
                 continue;
             };
             let normalized_surface_hit = surface_hit.pos / panel_transform.scale().xy();
-            // Get pixel position on the render target texture (top-left origin, y-down)
-            let pointer_pos = (normalized_surface_hit + 0.5) * texture_size.as_vec2();
+            // Get logical pixel position on the render target texture (top-left origin, y-down)
+            // The manual scaling is necessary because only the global UiScale is handled automatically, but the panels use the individual render target scale instead.
+            let pointer_pos =
+                (normalized_surface_hit + 0.5) * texture_size.as_vec2() / scale_factor;
 
             // Don't switch panel focus while dragging, even if the pointer leaves the panel bounds
             let prev_render_target = prev_pointer_loc.location.as_ref().map(|l| &l.target);
