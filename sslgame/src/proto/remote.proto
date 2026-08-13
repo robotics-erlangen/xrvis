@@ -10,7 +10,7 @@ import "remote_status.proto";
 // That means: (right-handed, z up, x towards blue goal, +x forward)
 // TODO: More protocol documentation
 
-// Root packer: Client -ws> Host
+// Root packet: Client -ws> Host
 message WsRequest {
     oneof content {
         WsStreamRequest ws_stream_req = 1;

@@ -1,48 +1,46 @@
-use crate::field::FieldHost;
+use crate::field::hosts::Host;
 use crate::network_tasks::host_discovery_task;
 use crate::proto::remote::HostAdvertisement;
-use async_channel::Receiver;
+use async_channel::{Receiver, Sender};
+use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use tracing::{error, info};
 
-pub fn field_discovery_plugin(app: &mut App) {
-    app.insert_resource(AvailableHosts::default());
+/// Handles automatic creation and removal of [Host] entities
+pub fn discovery_plugin(app: &mut App) {
     app.add_systems(PreUpdate, receive_host_advertisements);
+    app.world_mut()
+        .register_component_hooks::<Host>()
+        .on_remove(on_host_dropped);
 }
 
-#[derive(Resource, Debug, Default)]
-pub struct AvailableHosts {
-    pub(crate) discovered: HashSet<FieldHost>,
-    /// All hosts that were dropped because of websocket exits since the last discovery update.\
-    /// This separation is necessary because a field might be despawned just after the discovery received
-    /// its advertisement for this cycle, causing it to still be included in the next update.
-    /// The `dropped` list can be used to filter for these zombie connections and also
-    /// communicate the disconnect to users immediately, before the next discovery update
-    /// (changes to `dropped` also trigger change detection).
-    pub(crate) dropped: HashSet<FieldHost>,
-}
-
-impl AvailableHosts {
-    /// Gets all currently available hosts, correctly handling all types of disconnects.
-    pub fn available(&self) -> impl Iterator<Item = &FieldHost> {
-        self.discovered.iter().filter(|h| !self.dropped.contains(h))
-    }
-}
-
+/// Handle to the currently running discovery task
 #[derive(Resource, Debug)]
 struct HostDiscoveryTask {
     discovery_channel: Receiver<Vec<(SocketAddr, HostAdvertisement)>>,
+    drop_feedback_channel: Sender<SocketAddr>,
     discovery_task: Task<()>,
+}
+
+/// Forwards the dropped host to the discovery task so it can be immediately removed from any remaining internal state.
+/// Without this, the dropped host could still be included in the next host list if that is sent before its timeout.
+fn on_host_dropped(mut world: DeferredWorld, context: HookContext) {
+    let dropped_host_addr = world.get::<Host>(context.entity).unwrap().websocket_addr;
+    let discover_task = world.resource_mut::<HostDiscoveryTask>();
+    discover_task
+        .drop_feedback_channel
+        .send_blocking(dropped_host_addr)
+        .unwrap();
 }
 
 /// Manages the HostDiscoveryTask and updates the AvailableHosts resource
 fn receive_host_advertisements(
     mut commands: Commands,
     running_receiver: Option<Res<HostDiscoveryTask>>,
-    mut available_hosts: ResMut<AvailableHosts>,
+    q_available_hosts: Query<(&Host, Entity)>,
 ) {
     if let Some(discovery_task) = running_receiver {
         if discovery_task.discovery_task.is_finished() {
@@ -57,32 +55,46 @@ fn receive_host_advertisements(
                     .map(|(addr, adv)| {
                         let mut websocket_addr = addr;
                         websocket_addr.set_port(adv.websocket_port as u16);
-                        FieldHost {
+                        Host {
                             websocket_addr,
                             hostname: adv.hostname,
                         }
                     })
-                    // Skip any hosts that might have been dropped after their advertisement was already received in this discovery cycle.
-                    .filter(|h| !available_hosts.dropped.contains(h))
-                    .collect::<HashSet<_>>();
+                    .collect::<Vec<_>>();
+                let current_hosts = q_available_hosts.iter().collect::<Vec<_>>();
 
-                // The dropped list can't affect the next discovery, so it can be cleared.
-                // Only mut deref the resource (and trigger change detection) when the hosts have actually changed
-                if !available_hosts.dropped.is_empty() {
-                    available_hosts.dropped.clear();
-                }
-
-                if new_hosts != available_hosts.discovered {
-                    available_hosts.discovered = new_hosts;
-                }
+                // Remove old hosts
+                current_hosts
+                    .iter()
+                    .filter(|(ch, _)| {
+                        !new_hosts
+                            .iter()
+                            .any(|nh| nh.websocket_addr == ch.websocket_addr)
+                    })
+                    .for_each(|(_, e)| {
+                        commands.entity(*e).despawn();
+                    });
+                // Add new hosts
+                new_hosts
+                    .into_iter()
+                    .filter(|nh| {
+                        !current_hosts
+                            .iter()
+                            .any(|(ch, _)| ch.websocket_addr == nh.websocket_addr)
+                    })
+                    .for_each(|nh| {
+                        commands.spawn(nh);
+                    });
             }
         }
     } else {
         // Start a new discovery task
-        let (tx, rx) = async_channel::bounded(5);
-        let task = IoTaskPool::get().spawn(host_discovery_task(tx));
+        let (host_tx, host_rx) = async_channel::bounded(5);
+        let (dropped_tx, dropped_rx) = async_channel::bounded(5);
+        let task = IoTaskPool::get().spawn(host_discovery_task(host_tx, dropped_rx));
         commands.insert_resource(HostDiscoveryTask {
-            discovery_channel: rx,
+            discovery_channel: host_rx,
+            drop_feedback_channel: dropped_tx,
             discovery_task: task,
         });
         info!("Host discovery task started");

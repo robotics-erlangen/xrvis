@@ -1,7 +1,7 @@
 use crate::mesh_gen::{CustomMeshBuilder, bevy_col, circle_vertices, with_col};
+use crate::proto;
 use crate::proto::remote::vis_shape::Geom;
 use crate::proto::remote::{VisShape, Visualization};
-use crate::{AvailableVisualizations, proto};
 use bevy::mesh::Mesh;
 use tracing::warn;
 
@@ -9,10 +9,7 @@ const Z_HEIGHT: f32 = 0.01;
 const DEFAULT_LINE_WIDTH: f32 = 0.01;
 
 /// Builds a single mesh containing all geometry from the visualization list.
-pub fn simple_vis_mesh(
-    vis_list: &[&Visualization],
-    debug_names: Option<&AvailableVisualizations>,
-) -> Mesh {
+pub fn simple_vis_mesh(vis_list: &[&Visualization]) -> Mesh {
     let mut mesh = CustomMeshBuilder::new();
 
     for (vis_id, part) in vis_list
@@ -24,11 +21,9 @@ pub fn simple_vis_mesh(
             Some(Geom::Polygon(poly)) if !poly.point.is_empty() => polygon_vis(&mut mesh, part),
             Some(Geom::Path(path)) if !path.point.is_empty() => path_vis(&mut mesh, part),
             other => {
+                // TODO: Print the string name of the broken visualization
                 warn!(
-                    "Invalid visualization part in {}: {}",
-                    debug_names
-                        .and_then(|names| names.visualizations.get(vis_id))
-                        .unwrap_or(&vis_id.to_string()),
+                    "Invalid visualization part in {vis_id}: {}",
                     other.map(|_| "Empty geometry").unwrap_or("No geometry")
                 );
                 continue;

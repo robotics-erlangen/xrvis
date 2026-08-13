@@ -1,4 +1,5 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
+use bevy::ecs::relationship::RelationshipSourceCollection;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::view::NoIndirectDrawing;
@@ -10,9 +11,12 @@ use bevy_mod_openxr::init::OxrInitPlugin;
 use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::{AppInfo, EnvironmentBlendMode, Version};
 use sslgame::field::Field;
-use sslgame::field::discovery::AvailableHosts;
-use sslgame::field::visualizations::{AvailableVisualizations, SelectedVisualizations};
-use sslgame::proto::remote::VisualizationFilter;
+use sslgame::field::hosts::{
+    BallHost, BlueRobotHost, GameStateHost, GeometryHost, Host, HostConnection, YellowRobotHost,
+};
+use sslgame::field::visualizations::{
+    AllHostVisualizations, VisualizationInstance, VisualizationName, VisualizationUsages,
+};
 use sslgame::ssl_game_plugin;
 
 mod interaction;
@@ -60,29 +64,6 @@ pub fn main() -> AppExit {
 
     // App setup
     app.add_plugins(ssl_game_plugin)
-        .add_systems(
-            Update,
-            |mut q_fields: Query<
-                (&AvailableVisualizations, &mut SelectedVisualizations),
-                Changed<AvailableVisualizations>,
-            >| {
-                for (available, mut selected) in q_fields.iter_mut() {
-                    let new_filter = VisualizationFilter {
-                        allowed_vis_source: available.sources.keys().copied().collect(),
-                        allowed_vis_id: available
-                            .visualizations
-                            .iter()
-                            .filter(|(id, name)| {
-                                let name_lower = name.to_ascii_lowercase();
-                                !name_lower.contains("zone") && !name_lower.contains("obstacle")
-                            })
-                            .map(|(id, _)| *id)
-                            .collect(),
-                    };
-                    selected.set_if_neq(SelectedVisualizations(new_filter));
-                }
-            },
-        )
         .add_plugins(interaction_old::old_interaction_plugin)
         .add_plugins(interaction::interaction_plugins)
         .add_plugins(sslgame::panels::spatial_panel_plugin)
@@ -91,10 +72,7 @@ pub fn main() -> AppExit {
         .add_plugins(panels::global_settings::global_settings_plugin)
         .add_systems(Startup, setup)
         .add_systems(Update, modify_cameras)
-        .add_systems(
-            Update,
-            spawn_new_hosts.run_if(resource_changed::<AvailableHosts>),
-        )
+        .add_systems(Update, (spawn_new_hosts, spawn_all_visualizations))
         .insert_resource(GlobalAmbientLight {
             color: Default::default(),
             brightness: 500.0,
@@ -126,26 +104,45 @@ fn modify_cameras(
 
 fn spawn_new_hosts(
     mut commands: Commands,
-    available_hosts: Res<AvailableHosts>,
+    q_available_hosts: Query<(&Host, Option<&HostConnection>, Entity)>,
     q_spawned_field: Option<Single<(&Field, Entity)>>,
 ) {
-    let mut new_hosts = available_hosts.available();
+    if let Some((host, host_conn, host_entity)) = q_available_hosts.iter().next()
+        && q_spawned_field.is_none()
+    {
+        // Spawn a new field if there isn't one currently spawned
+        if host_conn.is_none() {
+            commands.entity(host_entity).insert(host.start_connection());
+        }
+        commands.spawn((
+            Field,
+            GeometryHost(host_entity),
+            GameStateHost(host_entity),
+            BallHost(host_entity),
+            YellowRobotHost(host_entity),
+            BlueRobotHost(host_entity),
+            Transform::IDENTITY,
+        ));
+    }
+}
 
-    if let Some(new_host) = new_hosts.next() {
-        match q_spawned_field.as_deref() {
-            // Replace the field if it is not one of the new hosts, but a different one is there to replace it
-            Some((field, entity))
-                if field.host.websocket_addr != new_host.websocket_addr
-                    && !new_hosts.any(|h| field.host.websocket_addr == h.websocket_addr) =>
+fn spawn_all_visualizations(
+    mut commands: Commands,
+    q_fields: Query<(&YellowRobotHost, &BlueRobotHost, Entity), With<Field>>,
+    q_hosts: Query<Option<&AllHostVisualizations>, With<HostConnection>>,
+    q_new_visualizations: Query<(&VisualizationName, Entity), Without<VisualizationUsages>>,
+) {
+    for (yellow_host_ref, blue_host_ref, field_entity) in q_fields {
+        for host_entity in yellow_host_ref.0.iter().chain(blue_host_ref.0.iter()) {
+            let host_vis_list = q_hosts.get(host_entity).unwrap();
+            for (vis_name, vis_entity) in
+                q_new_visualizations.iter_many(host_vis_list.into_iter().flatten())
             {
-                commands.entity(*entity).despawn();
-                commands.spawn((Field::bind((*new_host).clone()), Transform::IDENTITY));
+                let name_lower = vis_name.0.to_ascii_lowercase();
+                if !name_lower.contains("zone") && !name_lower.contains("obstacle") {
+                    commands.spawn((VisualizationInstance(vis_entity), ChildOf(field_entity)));
+                }
             }
-            // Spawn a new field if there isn't one currently spawned
-            None => {
-                commands.spawn((Field::bind(new_host.clone()), Transform::IDENTITY));
-            }
-            _ => {}
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::field::FieldGeometry;
+use crate::field::geometry::FieldGeometry;
 use crate::mesh_gen::{CustomMeshBuilder, circle_vertices, with_col};
 use bevy::color::Color;
 use bevy::mesh::Mesh;

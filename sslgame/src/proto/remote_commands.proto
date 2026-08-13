@@ -3,10 +3,19 @@ syntax = "proto2";
 package remote;
 
 // Whitelist for visualizations, used to apply per-client filtering before sending.
-// Different id filters per source should be handled client-side.
+// The filter shouldn't fully hide visualizations. At least their id still has to be be included let the client see the whole hierarchy.
 message VisualizationFilter {
-    repeated uint32 allowed_vis_source = 1;
-    repeated uint32 allowed_vis_id = 2;
+    // An entry in the VisualizationFilter whitelist.
+    // (0, 1): Vis 1 in source 0
+    // (None, 1): Vis 1 from any source
+    // (0, None): All visualizations from source 0
+    // (None, None): All visualizations
+    message VisualizationFilterEntry {
+        optional uint32 source_id = 1;
+        optional uint32 vis_id = 2;
+    }
+
+    repeated VisualizationFilterEntry allowed_visualizations = 1;
 }
 
 // Manually moves a robot to the specified location until a different command is issued.

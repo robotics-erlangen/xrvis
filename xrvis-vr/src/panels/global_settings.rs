@@ -24,12 +24,12 @@ pub fn global_settings_plugin(app: &mut App) {
 fn manage_global_settings_panel(
     mut commands: Commands,
     mut panel_spawner: SpatialPanelSpawner,
-    (floating_anchor, panels): (
+    (floating_anchor, q_panels): (
         Single<Entity, With<FloatingPanelAnchor>>,
         Query<&GlobalSettingsPanel>,
     ),
 ) {
-    if !panels.is_empty() {
+    if !q_panels.is_empty() {
         return;
     }
 
@@ -203,18 +203,18 @@ fn global_settings_panel() -> impl Scene {
 fn update_global_settings_panel(
     mut commands: Commands,
     settings: Res<sslgame::RenderSettings>,
-    query: Query<Ref<GlobalSettingsPanel>, Without<Checked>>,
-    checked: Query<&Checked>,
+    q_panels: Query<Ref<GlobalSettingsPanel>>,
+    q_checked: Query<&Checked>,
 ) {
-    for panel in query {
+    for panel in q_panels {
         if !(panel.is_added() || settings.is_changed()) {
             continue;
         }
 
-        let field_checked = checked.contains(panel.field_toggle);
-        let robots_checked = checked.contains(panel.robots_toggle);
-        let ball_checked = checked.contains(panel.ball_toggle);
-        let vis_checked = checked.contains(panel.vis_toggle);
+        let field_checked = q_checked.contains(panel.field_toggle);
+        let robots_checked = q_checked.contains(panel.robots_toggle);
+        let ball_checked = q_checked.contains(panel.ball_toggle);
+        let vis_checked = q_checked.contains(panel.vis_toggle);
 
         if !field_checked && settings.field {
             commands.entity(panel.field_toggle).insert(Checked);
@@ -228,12 +228,12 @@ fn update_global_settings_panel(
         }
         if !ball_checked && settings.ball {
             commands.entity(panel.ball_toggle).insert(Checked);
-        } else if field_checked && !settings.ball {
+        } else if ball_checked && !settings.ball {
             commands.entity(panel.ball_toggle).remove::<Checked>();
         }
         if !vis_checked && settings.visualizations {
             commands.entity(panel.vis_toggle).insert(Checked);
-        } else if field_checked && !settings.visualizations {
+        } else if vis_checked && !settings.visualizations {
             commands.entity(panel.vis_toggle).remove::<Checked>();
         }
     }

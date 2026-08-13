@@ -75,7 +75,7 @@ message VisGroupSelector {
 // Collection of visualizations from a single source
 message VisualizationSet {
     // Shorthand source id, a human readable name is included in the VisMappings (e.g. strategy_blue, autoref, ...).
-    optional uint32 source = 1;
+    required uint32 source = 1;
     repeated Visualization visualization = 2;
 }
 

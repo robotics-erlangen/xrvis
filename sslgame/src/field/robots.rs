@@ -1,5 +1,6 @@
 use crate::depth_mask_material::DepthMaskMaterial;
 use crate::field::Team;
+use crate::field::hosts::{BallFields, BlueRobotFields, Host, YellowRobotFields};
 use crate::proto::remote::WorldState;
 use crate::transform_filter::{TransformFilter, apply_filtered_transform};
 use crate::{RenderSettings, RobotRenderSettings, proto};
@@ -14,7 +15,7 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
-pub fn field_robot_plugin(app: &mut App) {
+pub fn robot_plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
 
     let world = app.world_mut();
@@ -58,16 +59,32 @@ pub(crate) struct BallMesh(Handle<Mesh>, Handle<StandardMaterial>);
 /// Updates the robots and balls on a single field to a new WorldState. Has to be called manually using Commands::run_system_cached_with.
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_world_state(
-    In((field_entity, mut world_state, rx_time)): In<(Entity, WorldState, Instant)>,
+    In((host_entity, mut world_state, rx_time)): In<(Entity, WorldState, Instant)>,
     mut commands: Commands,
     render_settings: Res<RenderSettings>,
     asset_server: Res<AssetServer>,
     (ball_mesh, robot_mask_mesh): (Res<BallMesh>, Res<RobotMaskMesh>),
-    (mut q_robots, q_balls): (
+    (q_hosts, mut q_robots, q_balls): (
+        Query<
+            (
+                Option<&BallFields>,
+                Option<&YellowRobotFields>,
+                Option<&BlueRobotFields>,
+            ),
+            With<Host>,
+        >,
         Query<(&Robot, &Team, &mut TransformFilter, &ChildOf, Entity)>,
         Query<(&Transform, &ChildOf, Entity), (With<Ball>, Without<Robot>)>,
     ),
 ) {
+    let (ball_fields, yellow_robot_fields, blue_robot_fields) = match q_hosts.get(host_entity) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Failed to fetch host entity {host_entity:?} for update_world_state: {e}");
+            return;
+        }
+    };
+
     // Remap from the vision coordinate system (right-handed, z up, x towards blue goal, +x forward)
     // to bevy's coordinate system (right-handed, y up, x towards blue goal, -z forward) with y and z swapped
     for ball in &mut world_state.ball {
@@ -82,39 +99,37 @@ pub(crate) fn update_world_state(
         robot.phi -= PI / 2.0;
     }
 
-    // TODO: Correlate new to old balls and move them instead of recreating everything. Don't forget to update handle_render_settings_change
-    // Despawn old balls
-    q_balls
-        .iter()
-        .map(|(_, c, e)| (c.parent(), e))
-        .filter(|(p, _)| *p == field_entity)
-        .for_each(|(_, e)| {
-            commands.entity(field_entity).detach_child(e);
-            commands.entity(e).despawn()
-        });
+    for field in ball_fields.map(|a| a.iter()).into_iter().flatten() {
+        // TODO: Correlate new to old balls and move them instead of recreating everything
+        // Despawn old balls
+        q_balls
+            .iter()
+            .map(|(_, c, e)| (c.parent(), e))
+            .filter(|(p, _)| *p == field)
+            .for_each(|(_, e)| commands.entity(e).despawn());
 
-    // Spawn new balls
-    for new_ball in world_state.ball {
-        let new_ball_pos = Vec3::new(new_ball.p_x, new_ball.p_z.unwrap_or(0.0), new_ball.p_y);
+        // Spawn new balls
+        for new_ball in &world_state.ball {
+            let new_ball_pos = Vec3::new(new_ball.p_x, new_ball.p_z.unwrap_or(0.0), new_ball.p_y);
 
-        let mut new_ball = commands.spawn((Ball, Transform::from_translation(new_ball_pos)));
-        if render_settings.ball {
-            new_ball.insert((
-                Mesh3d(ball_mesh.0.clone()),
-                MeshMaterial3d(ball_mesh.1.clone()),
-            ));
+            let mut new_ball = commands.spawn((Ball, Transform::from_translation(new_ball_pos)));
+            if render_settings.ball {
+                new_ball.insert((
+                    Mesh3d(ball_mesh.0.clone()),
+                    MeshMaterial3d(ball_mesh.1.clone()),
+                ));
+            }
+            let new_ball = new_ball.id();
+            commands.entity(field).add_child(new_ball);
         }
-        let new_ball = new_ball.id();
-        commands.entity(field_entity).add_child(new_ball);
     }
 
-    // Update robots
-    let mut leftover_robots = q_robots
-        .iter_mut()
-        .filter(|(_, _, _, c, _)| c.parent() == field_entity)
-        .collect::<Vec<_>>();
+    let mut update_robots = |field: Entity, team: Team, new_robots: &[proto::remote::Robot]| {
+        let mut leftover_robots = q_robots
+            .iter_mut()
+            .filter(|(_, robot_team, _, c, _)| c.parent() == field && **robot_team == team)
+            .collect::<Vec<_>>();
 
-    let mut update_robots = |team: Team, new_robots: Vec<proto::remote::Robot>| {
         for robot_update in new_robots {
             let leftover_index = leftover_robots
                 .iter()
@@ -123,7 +138,7 @@ pub(crate) fn update_world_state(
 
             if let Some(i) = leftover_index {
                 // Robot already exists -> update transform
-                let (_, _, mut t, _, _) = leftover_robots.remove(i);
+                let (_, _, mut t, _, _) = leftover_robots.swap_remove(i);
                 t.push_sample(
                     Affine3A::from_scale_rotation_translation(
                         Vec3::ONE,
@@ -160,17 +175,24 @@ pub(crate) fn update_world_state(
                     RobotRenderSettings::None => {}
                 }
                 let new_robot_id = new_robot.id();
-                commands.entity(field_entity).add_child(new_robot_id);
+                commands.entity(field).add_child(new_robot_id);
             }
         }
+
+        // Despawn all remaining robots
+        leftover_robots
+            .into_iter()
+            .for_each(|(_, _, _, _, e)| commands.entity(e).despawn());
     };
 
-    update_robots(Team::Yellow, world_state.yellow_robot);
-    update_robots(Team::Blue, world_state.blue_robot);
-
-    // Despawn all remaining robots
-    leftover_robots.into_iter().for_each(|(_, _, _, _, e)| {
-        commands.entity(field_entity).detach_child(e);
-        commands.entity(e).despawn()
-    });
+    if let Some(fields) = yellow_robot_fields {
+        for field in fields.iter() {
+            update_robots(field, Team::Yellow, &world_state.yellow_robot);
+        }
+    }
+    if let Some(fields) = blue_robot_fields {
+        for field in fields.iter() {
+            update_robots(field, Team::Blue, &world_state.blue_robot);
+        }
+    }
 }

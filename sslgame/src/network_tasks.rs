@@ -31,7 +31,10 @@ enum HostKey {
     Id(u32),
 }
 
-pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertisement)>>) {
+pub async fn host_discovery_task(
+    hosts_out: Sender<Vec<(SocketAddr, HostAdvertisement)>>,
+    dropped_in: Receiver<SocketAddr>,
+) {
     let socket_v4 = UdpSocket::bind_multicast((Ipv4Addr::UNSPECIFIED, BEACON_ADDR_V4.port()))
         .expect("Failed to bind ipv4 discovery socket");
     let socket_v6 = UdpSocket::bind_multicast((Ipv6Addr::UNSPECIFIED, BEACON_ADDR_V6.port()))
@@ -78,32 +81,61 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
 
         // ======== Merge packet streams ========
 
+        #[allow(clippy::large_enum_variant)]
+        enum DiscoveryEvent {
+            AdvertisementPacket {
+                size: usize,
+                /// The address the packet was received from. This is NOT the same as the
+                /// websocket address that is used to identify hosts everywhere else!\
+                /// The ip is the same, but the port of the websocket address is specified
+                /// within the (at this point still undecoded) advertisement packet.
+                source_addr: SocketAddr,
+                rx_buf: [u8; 256],
+            },
+            HostDropped {
+                websocket_addr: SocketAddr,
+            },
+        }
+
         fn make_packet_stream(
             socket: &UdpSocket,
-        ) -> impl stream::Stream<Item = io::Result<(usize, SocketAddr, [u8; 256])>> + '_ {
+        ) -> impl stream::Stream<Item = io::Result<DiscoveryEvent>> + '_ {
             // Hack to generate a packet stream from an udp socket. The socket is passed along as state.
             stream::unfold(socket, async |socket| {
                 let mut rx_buf = [0u8; 256]; // Discovery packets are very small
                 let result = socket
                     .recv_from(&mut rx_buf)
                     .await
-                    .map(|(size, source_addr)| (size, source_addr, rx_buf));
+                    .map(|(size, source_addr)| DiscoveryEvent::AdvertisementPacket {
+                        size,
+                        source_addr,
+                        rx_buf,
+                    });
                 Some((result, socket))
             })
         }
 
         let stream_v4 = make_packet_stream(&socket_v4);
         let stream_v6 = make_packet_stream(&socket_v6);
+        let stream_dropped = dropped_in.clone().map(|addr| {
+            Ok(DiscoveryEvent::HostDropped {
+                websocket_addr: addr,
+            })
+        });
         let stream_timeout = stream::once_future(async {
             async_io::Timer::at(next_refresh).await;
             Err(io::ErrorKind::TimedOut.into())
         });
 
-        let mut merged_stream = stream_v4.or(stream_v6).or(stream_timeout).boxed();
+        let mut merged_stream = stream_timeout
+            .or(stream_dropped)
+            .or(stream_v6) // Prefer v6 when receiving both at once
+            .or(stream_v4)
+            .boxed();
 
         // ======== Collect packets from the merged stream until the timeout ========
 
-        /// Prunes and sends the host list to the host discovery channel.
+        /// Prunes and sends the host list to the host discovery channel. Exit on error.
         fn send_host_list(
             channel: &Sender<Vec<(SocketAddr, HostAdvertisement)>>,
             host_map: &mut HashMap<HostKey, (Instant, SocketAddr, HostAdvertisement)>,
@@ -137,7 +169,11 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
                 .await
                 .expect("The host discovery stream should never yield None")
             {
-                Ok((size, source_addr, rx_buf)) => {
+                Ok(DiscoveryEvent::AdvertisementPacket {
+                    size,
+                    source_addr,
+                    rx_buf,
+                }) => {
                     let new_host = match HostAdvertisement::decode(&rx_buf[..size]) {
                         Ok(host) => {
                             debug!("Received host advertisement from {source_addr}");
@@ -149,23 +185,33 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
                         }
                     };
 
-                    if let Some(instance_id) = new_host.instance_id {
-                        match host_map.entry(HostKey::Id(instance_id)) {
-                            Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
-                            Entry::Vacant(entry) => {
-                                entry.insert((Instant::now(), source_addr, new_host));
-                            }
-                        }
+                    let host_key = if let Some(instance_id) = new_host.instance_id {
+                        HostKey::Id(instance_id)
                     } else {
-                        match host_map.entry(HostKey::Addr(source_addr)) {
-                            Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
-                            Entry::Vacant(entry) => {
-                                entry.insert((Instant::now(), source_addr, new_host));
+                        HostKey::Addr(source_addr)
+                    };
+
+                    match host_map.entry(host_key) {
+                        Entry::Occupied(mut entry) => entry.get_mut().0 = Instant::now(),
+                        Entry::Vacant(entry) => {
+                            entry.insert((Instant::now(), source_addr, new_host));
+                            if send_host_list(&hosts_out, &mut host_map).is_err() {
+                                return;
                             }
                         }
                     }
+                }
+                Ok(DiscoveryEvent::HostDropped {
+                    websocket_addr: dropped_websocket_addr,
+                }) => {
+                    // Remove any matching hosts from the host map. Full retain because buggy
+                    // clients might send advertisements both with and without an instance id.
+                    host_map.retain(|_, (_, adv_source_addr, adv)| {
+                        let mut websocket_addr = *adv_source_addr;
+                        websocket_addr.set_port(adv.websocket_port as u16);
+                        websocket_addr != dropped_websocket_addr
+                    });
 
-                    // Send update immediately when receiving a packet to avoid connection delays
                     if send_host_list(&hosts_out, &mut host_map).is_err() {
                         return;
                     }
@@ -178,7 +224,8 @@ pub async fn host_discovery_task(hosts_out: Sender<Vec<(SocketAddr, HostAdvertis
             }
         }
 
-        // Also send after each refresh to catch the last connection dropping
+        // Send the host list after each refresh to catch cases where a burst of hosts overloads
+        // the discovery channel and the updates for the last hosts get discarded.
         if send_host_list(&hosts_out, &mut host_map).is_err() {
             return;
         }

@@ -9,12 +9,11 @@ mod mesh_gen;
 mod network_tasks;
 pub mod panels;
 mod transform_filter;
-mod visualization_tracker;
 
 use crate::field::Field;
 use crate::field::robots::{Ball, Robot};
+use crate::field::visualizations::VisualizationInstance;
 use bevy::prelude::*;
-use field::visualizations::AvailableVisualizations;
 
 pub fn ssl_game_plugin(app: &mut App) {
     app.add_plugins(field::field_plugin);
@@ -58,6 +57,7 @@ pub enum RobotRenderSettings {
     None,
 }
 
+/// Global settings for how to render the fields.
 #[derive(Resource, Clone, Debug)]
 pub struct RenderSettings {
     pub field: bool,
@@ -108,19 +108,37 @@ struct DefaultMaterial {
 fn handle_render_settings_change(
     mut commands: Commands,
     render_settings: Res<RenderSettings>,
-    (q_fields, q_robots, _q_balls): (
+    (q_fields, q_robots, q_balls, q_vis_instances): (
         Query<Entity, (With<Field>, With<Mesh3d>)>,
         Query<Entity, With<Robot>>,
         Query<Entity, With<Ball>>,
+        Query<Entity, With<VisualizationInstance>>,
     ),
 ) {
-    // Remove all potentially outdated entities. They will be recreated automatically.
-    // Does not affect visualizations and balls, as they get regenerated periodically anyways.
     if !render_settings.field {
-        // The field entity is also used as a marker for data processing, so only the model is removed
         for field_entity in q_fields {
             commands.entity(field_entity).remove::<Mesh3d>();
+            commands
+                .entity(field_entity)
+                .remove::<MeshMaterial3d<StandardMaterial>>();
         }
     }
+    // TODO: Retain robots when changing graphics settings
     q_robots.iter().for_each(|e| commands.entity(e).despawn());
+    if !render_settings.ball {
+        for ball_entity in q_balls {
+            commands
+                .entity(ball_entity)
+                .remove::<Mesh3d>()
+                .remove::<MeshMaterial3d<StandardMaterial>>();
+        }
+    }
+    if !render_settings.visualizations {
+        for vis_instance_entity in q_vis_instances {
+            commands.entity(vis_instance_entity).remove::<Mesh3d>();
+            commands
+                .entity(vis_instance_entity)
+                .remove::<MeshMaterial3d<StandardMaterial>>();
+        }
+    }
 }

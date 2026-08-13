@@ -9,8 +9,10 @@ use bevy::picking::pointer::{
 };
 use bevy::prelude::*;
 use schminput::BoolActionValue;
+use sslgame::field::geometry::FieldGeometry;
+use sslgame::field::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowRobotHost};
 use sslgame::field::robots::Robot;
-use sslgame::field::{Field, FieldGeometry, Team};
+use sslgame::field::{Field, Team};
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
 use sslgame::proto::remote::{RobotMoveCommand, ws_request};
 use std::ops::Range;
@@ -328,22 +330,37 @@ fn find_hit_robot(
         .map(|(robot, team, _, _)| (robot.0, *team))
 }
 
+#[allow(clippy::type_complexity)]
 pub fn drive_field_dragging(
     mut gizmos: Gizmos,
     mut commands: Commands,
     xr_pointers: Query<(&XrPointer, &PointerId)>,
-    mut fields: Query<(
-        &Field,
-        &FieldGeometry,
-        &GlobalTransform,
-        Option<&mut FieldDragAction>,
-        Entity,
-    )>,
+    mut fields: Query<
+        (
+            &GeometryHost,
+            Option<&YellowRobotHost>,
+            Option<&BlueRobotHost>,
+            &GlobalTransform,
+            Option<&mut FieldDragAction>,
+            Entity,
+        ),
+        With<Field>,
+    >,
+    geometry_hosts: Query<&FieldGeometry>,
+    robot_hosts: Query<&HostConnection>,
     robots: Query<(&Robot, &Team, &Transform, &ChildOf)>,
 ) {
-    for (field, field_geometry, field_transform, mut drag_action, field_entity) in fields.iter_mut()
+    for (
+        field_geometry_ref,
+        yellow_robot_ref,
+        blue_robot_ref,
+        field_transform,
+        mut drag_action,
+        field_entity,
+    ) in fields.iter_mut()
     {
-        let drag_bounds = field_geometry.play_area_size + field_geometry.boundary_width * 2.0;
+        let geometry = geometry_hosts.get(field_geometry_ref.0).unwrap();
+        let drag_bounds = geometry.play_area_size + geometry.boundary_width * 2.0;
 
         let (pointer_hit, dragging_robot_id, &mut dragging_robot_team) =
             if let Some(FieldDragAction(pointer_id, robot_id, robot_team, _last_send)) =
@@ -361,15 +378,23 @@ pub fn drive_field_dragging(
                     });
 
                 let Some(hit) = hit else {
-                    _ = field
-                        .connection
-                        .sender
-                        .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
-                            robot_id: *robot_id as u32,
-                            is_blue: *robot_team == Team::Blue,
-                            p_x: None,
-                            p_y: None,
-                        }));
+                    let host_conn = match (*robot_team, yellow_robot_ref, blue_robot_ref) {
+                        (Team::Yellow, Some(h), _) => robot_hosts.get(h.0).ok(),
+                        (Team::Blue, _, Some(h)) => robot_hosts.get(h.0).ok(),
+                        _ => None,
+                    };
+
+                    if let Some(host_conn) = host_conn {
+                        host_conn
+                            .sender
+                            .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
+                                robot_id: *robot_id as u32,
+                                is_blue: *robot_team == Team::Blue,
+                                p_x: None,
+                                p_y: None,
+                            }))
+                            .unwrap();
+                    }
                     commands.entity(field_entity).remove::<FieldDragAction>();
                     continue;
                 };
@@ -409,18 +434,26 @@ pub fn drive_field_dragging(
                 continue;
             };
 
-        if let Some(FieldDragAction(_, _, _, last_send)) = drag_action.as_deref_mut()
+        if let Some(FieldDragAction(_, _, robot_team, last_send)) = drag_action.as_deref_mut()
             && last_send.elapsed() > std::time::Duration::from_millis(30)
         {
-            _ = field
-                .connection
-                .sender
-                .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
-                    robot_id: dragging_robot_id as u32,
-                    is_blue: dragging_robot_team == Team::Blue,
-                    p_x: Some(pointer_hit.pos.x),
-                    p_y: Some(pointer_hit.pos.y),
-                }));
+            let host_conn = match (*robot_team, yellow_robot_ref, blue_robot_ref) {
+                (Team::Yellow, Some(h), _) => robot_hosts.get(h.0).ok(),
+                (Team::Blue, _, Some(h)) => robot_hosts.get(h.0).ok(),
+                _ => None,
+            };
+
+            if let Some(host_conn) = host_conn {
+                host_conn
+                    .sender
+                    .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
+                        robot_id: dragging_robot_id as u32,
+                        is_blue: dragging_robot_team == Team::Blue,
+                        p_x: Some(pointer_hit.pos.x),
+                        p_y: Some(pointer_hit.pos.y),
+                    }))
+                    .unwrap();
+            }
             *last_send = Instant::now();
         }
     }

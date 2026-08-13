@@ -1,4 +1,6 @@
-use crate::field::{FieldGeometry, GameState, Team};
+use crate::field::Team;
+use crate::field::game_state::GameState;
+use crate::field::geometry::FieldGeometry;
 use crate::panels::{SpatialPanelScaling, SpatialPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
