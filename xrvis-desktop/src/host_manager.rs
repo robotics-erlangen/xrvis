@@ -1,3 +1,4 @@
+use crate::icons::icon;
 use crate::sidebar::FieldId;
 use bevy::color::palettes::tailwind::{GREEN_500, RED_500};
 use bevy::ecs::template::TemplateContext;
@@ -7,6 +8,7 @@ use bevy::feathers::tokens;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use derive_more::IntoIterator;
+use lucide_icons::Icon;
 use sslgame::field::Field;
 use sslgame::field::hosts::{
     BallHost, BlueRobotHost, GameStateHost, GeometryFields, GeometryHost, Host, HostConnection,
@@ -154,18 +156,26 @@ fn host_entry_scene(
                 (
                     @FeathersButton {
                         @caption: bsn! {
-                            Text({if spawned_as.is_some() {"Despawn"} else {"Spawn"}})
-                            TextFont {font_size: px(12)}
-                            TextLayout {linebreak: LineBreak::NoWrap}
-                            Node {padding: UiRect::top(px(1))}
+                            icon({if spawned_as.is_some() {Icon::Link2Off.unicode()} else {Icon::Link2.unicode()}}, px(12))
                         },
-                        @variant: ButtonVariant::Normal,
                     }
                     Node {
                         height: percent(100),
                     }
                     Visibility::Hidden
                     on(on_connect_click)
+                ),
+                (
+                    @FeathersButton {
+                        @caption: bsn! {
+                            icon((if spawned_as.is_some() {Icon::CornerUpLeft} else {Icon::CornerRightDown}).unicode(), px(12))
+                        },
+                    }
+                    Node {
+                        height: percent(100),
+                    }
+                    Visibility::Hidden
+                    on(on_spawn_click)
                 ),
             ],
             @variant: ButtonVariant::Plain,
@@ -254,7 +264,7 @@ fn on_remove_last_entry(remove: On<Remove, Children>, mut commands: Commands) {
     );
 }
 
-// ======== Hover actions ========
+// ======== Button interactions ========
 
 fn on_host_hover(
     host_hover: On<Pointer<Enter>>,
@@ -262,9 +272,12 @@ fn on_host_hover(
     q_children: Query<&Children>,
 ) {
     if let Ok(children) = q_children.get(host_hover.entity)
-        && let Some(last_child) = children.last()
+        && let Some([connect_button, spawn_button]) = children.last_chunk()
     {
-        commands.entity(*last_child).insert(Visibility::Inherited);
+        commands
+            .entity(*connect_button)
+            .insert(Visibility::Inherited);
+        commands.entity(*spawn_button).insert(Visibility::Inherited);
     }
 }
 
@@ -274,9 +287,10 @@ fn on_host_unhover(
     q_children: Query<&Children>,
 ) {
     if let Ok(children) = q_children.get(host_unhover.entity)
-        && let Some(last_child) = children.last()
+        && let Some([connect_button, spawn_button]) = children.last_chunk()
     {
-        commands.entity(*last_child).insert(Visibility::Hidden);
+        commands.entity(*connect_button).insert(Visibility::Hidden);
+        commands.entity(*spawn_button).insert(Visibility::Hidden);
     }
 }
 
@@ -284,47 +298,59 @@ fn on_host_unhover(
 fn on_connect_click(
     click: On<Activate>,
     mut commands: Commands,
-    mut q_text: Query<&mut Text>,
-    (q_children, q_parent): (Query<&Children>, Query<&ChildOf>),
-    (q_entry, q_host): (
-        Query<&HostUiRepresentsEntity>,
-        Query<(
-            &Host,
-            Option<&HostConnection>,
-            Option<&GeometryFields>,
-            Entity,
-        )>,
-    ),
+    q_parent: Query<&ChildOf>,
+    q_entry: Query<&HostUiRepresentsEntity>,
+    q_host: Query<(&Host, Option<&HostConnection>, Entity)>,
+) {
+    if let Ok(entry_entity) = q_parent.get(click.entity)
+        && let Ok(host_ref) = q_entry.get(entry_entity.0)
+        && let Ok((host, host_conn, host_entity)) = q_host.get(host_ref.0)
+    {
+        if host_conn.is_some() {
+            commands.entity(host_entity).remove::<HostConnection>();
+        } else {
+            commands.entity(host_entity).insert(host.start_connection());
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn on_spawn_click(
+    click: On<Activate>,
+    mut commands: Commands,
+    q_parent: Query<&ChildOf>,
+    q_entry: Query<&HostUiRepresentsEntity>,
+    q_host: Query<(
+        &Host,
+        Option<&HostConnection>,
+        Option<&GeometryFields>,
+        Entity,
+    )>,
     q_field: Query<&FieldId>,
 ) {
-    // Get referenced host
     if let Ok(entry_entity) = q_parent.get(click.entity)
         && let Ok(host_ref) = q_entry.get(entry_entity.0)
         && let Ok((host, host_conn, host_usages, host_entity)) = q_host.get(host_ref.0)
-        // Get button text
-        && let Ok(button_children) = q_children.get(click.entity)
-        && let Some(text_entity) = button_children.first()
-        && let Ok(mut text) = q_text.get_mut(*text_entity)
     {
-        let mut current_field_ids = q_field.iter().collect::<Vec<_>>();
-        current_field_ids.sort_by_key(|f| f.0);
-        let free_id = current_field_ids
-            .iter()
-            .enumerate()
-            .find_map(|(i, id)| (i != id.0 as usize).then_some(i))
-            .unwrap_or(current_field_ids.len());
-
         if let Some(fields) = host_usages {
-            // TODO: Decouple "spawned" from "connected"
-            commands.entity(host_entity).remove::<HostConnection>();
+            // This UI will only ever spawn one, but the backend supports multiple
             for field_entity in fields.iter() {
                 commands.entity(field_entity).despawn();
             }
-            text.0 = "Spawn".to_string();
         } else {
+            // Autoconnect for one-click placement
             if host_conn.is_none() {
                 commands.entity(host_entity).insert(host.start_connection());
             }
+
+            let mut current_field_ids = q_field.iter().collect::<Vec<_>>();
+            current_field_ids.sort_by_key(|f| f.0);
+            let free_id = current_field_ids
+                .iter()
+                .enumerate()
+                .find_map(|(i, id)| (i != id.0 as usize).then_some(i))
+                .unwrap_or(current_field_ids.len());
+
             commands.spawn((
                 Field,
                 FieldId(free_id as u8),
@@ -335,7 +361,6 @@ fn on_connect_click(
                 BlueRobotHost(host_entity),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ));
-            text.0 = "Despawn".to_string();
         }
 
         // Relayout all the fields. Defer into a command so that it acts on the new state.
@@ -363,18 +388,27 @@ fn on_host_connect(
     mut commands: Commands,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
+    mut q_text: Query<&mut Text>,
 ) {
-    let Ok(ui_entry) = q_host.get(host_connect.entity) else {
+    let Ok(ui_entry_entities) = q_host.get(host_connect.entity) else {
         return;
     };
 
-    for ui_entity in ui_entry {
-        if let Ok(conn_indicator_box) = q_children.get(*ui_entity)
-            && let Ok(conn_indicator) = q_children.get(conn_indicator_box[0])
-        {
-            commands
-                .entity(conn_indicator[0])
-                .apply_scene(conn_indicator_connected_patch(true));
+    for entry_entity in ui_entry_entities {
+        if let Ok(entry_children) = q_children.get(*entry_entity) {
+            // Update the connection indicator
+            if let Ok(conn_indicator_inner) = q_children.get(entry_children[0]) {
+                commands
+                    .entity(conn_indicator_inner[0])
+                    .apply_scene(conn_indicator_connected_patch(true));
+            }
+
+            // Update the spawn button
+            if let Ok(spawn_caption_entity) = q_children.get(entry_children[3])
+                && let Ok(mut spawn_caption) = q_text.get_mut(spawn_caption_entity[0])
+            {
+                spawn_caption.0 = Icon::Link2Off.unicode().into();
+            }
         }
     }
 }
@@ -385,17 +419,26 @@ fn on_field_spawn(
     q_field: Query<(&FieldId, &GeometryHost)>,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
+    mut q_text: Query<&mut Text>,
 ) {
     if let Ok((field_id, geometry_host)) = q_field.get(field_spawn.entity)
         && let Ok(ui_entry_entities) = q_host.get(geometry_host.0)
     {
         for entry_entity in ui_entry_entities {
-            if let Ok(entry_children) = q_children.get(*entry_entity)
-                && let Ok(indicator) = q_children.get(entry_children[0])
-            {
-                commands
-                    .entity(indicator[0])
-                    .apply_scene(conn_indicator_spawned_patch(Some(field_id.0)));
+            if let Ok(entry_children) = q_children.get(*entry_entity) {
+                // Update the connection indicator
+                if let Ok(indicator) = q_children.get(entry_children[0]) {
+                    commands
+                        .entity(indicator[0])
+                        .apply_scene(conn_indicator_spawned_patch(Some(field_id.0)));
+                }
+
+                // Update the spawn button
+                if let Ok(spawn_caption_entity) = q_children.get(entry_children[4])
+                    && let Ok(mut spawn_caption) = q_text.get_mut(spawn_caption_entity[0])
+                {
+                    spawn_caption.0 = Icon::CornerUpLeft.unicode().into();
+                }
             }
         }
     }
@@ -406,21 +449,30 @@ fn on_host_disconnect(
     mut commands: Commands,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
+    mut q_text: Query<&mut Text>,
 ) {
-    let Ok(ui_entry) = q_host.get(host_disconnect.entity) else {
+    let Ok(ui_entry_entities) = q_host.get(host_disconnect.entity) else {
         return;
     };
 
-    for ui_entity in ui_entry {
-        if let Ok(conn_indicator_box) = q_children.get(*ui_entity)
-            && let Ok(conn_indicator) = q_children.get(conn_indicator_box[0])
-        {
-            // queue_silenced to handle full host despawns
-            commands
-                .entity(conn_indicator[0])
-                .queue_silenced(move |mut entity: EntityWorldMut| {
-                    entity.apply_scene(conn_indicator_connected_patch(false))
-                });
+    for entry_entity in ui_entry_entities {
+        if let Ok(entry_children) = q_children.get(*entry_entity) {
+            // Update the connection indicator
+            if let Ok(conn_indicator_inner) = q_children.get(entry_children[0]) {
+                // queue_silenced to handle full host despawns
+                commands.entity(conn_indicator_inner[0]).queue_silenced(
+                    move |mut entity: EntityWorldMut| {
+                        entity.apply_scene(conn_indicator_connected_patch(false))
+                    },
+                );
+            }
+
+            // Update the spawn button
+            if let Ok(spawn_caption_entity) = q_children.get(entry_children[3])
+                && let Ok(mut spawn_caption) = q_text.get_mut(spawn_caption_entity[0])
+            {
+                spawn_caption.0 = Icon::Link2.unicode().into();
+            }
         }
     }
 }
@@ -431,22 +483,31 @@ fn on_field_despawn(
     q_field: Query<&GeometryHost>,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
+    mut q_text: Query<&mut Text>,
 ) {
     if let Ok(geometry_host) = q_field.get(field_despawn.entity)
         && let Ok(ui_entry_entities) = q_host.get(geometry_host.0)
     {
         for entry_entity in ui_entry_entities {
-            if let Ok(entry_children) = q_children.get(*entry_entity)
-                && let Ok(indicator) = q_children.get(entry_children[0])
-            {
-                // queue_silenced to handle full host despawns
-                commands
-                    .entity(indicator[0])
-                    .queue_silenced(move |mut entity: EntityWorldMut| {
-                        entity
-                            .despawn_children()
-                            .apply_scene(conn_indicator_spawned_patch(None))
-                    });
+            if let Ok(entry_children) = q_children.get(*entry_entity) {
+                // Update the connection indicator
+                if let Ok(indicator) = q_children.get(entry_children[0]) {
+                    // queue_silenced to handle full host despawns
+                    commands.entity(indicator[0]).queue_silenced(
+                        move |mut entity: EntityWorldMut| {
+                            entity
+                                .despawn_children()
+                                .apply_scene(conn_indicator_spawned_patch(None))
+                        },
+                    );
+                }
+
+                // Update the spawn button
+                if let Ok(spawn_caption_entity) = q_children.get(entry_children[4])
+                    && let Ok(mut spawn_caption) = q_text.get_mut(spawn_caption_entity[0])
+                {
+                    spawn_caption.0 = Icon::CornerRightDown.unicode().into();
+                }
             }
         }
     }

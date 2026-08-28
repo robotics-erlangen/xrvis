@@ -3546,6 +3546,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "lucide-icons"
+version = "1.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "172fb17cd1a78f563fc85a5e57bdd0e0652039c8c727e3e5f160acefd5448e06"
+
+[[package]]
 name = "mach2"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6479,6 +6485,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "derive_more",
+ "lucide-icons",
  "sslgame",
 ]
 

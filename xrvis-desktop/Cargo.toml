@@ -10,5 +10,6 @@ rust-version.workspace = true
 [dependencies]
 bevy = { workspace = true, features = ["bevy_feathers"] }
 derive_more = { workspace = true, features = ["into_iterator"] }
+lucide-icons.workspace = true
 
 sslgame.workspace = true
