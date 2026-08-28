@@ -1,5 +1,5 @@
 use crate::field::Field;
-use crate::field::hosts::{GeometryHost, Host, HostConnection, UpdateHostDataSystemSet};
+use crate::field::hosts::{GeometryHost, HostConnection, UpdateHostDataSystemSet};
 use crate::mesh_gen::field::field_mesh;
 use crate::{DefaultMaterial, RenderSettings};
 use bevy::asset::Assets;
@@ -69,23 +69,18 @@ fn transfer_field_geometry(
     render_settings: Res<RenderSettings>,
     white_material: Res<DefaultMaterial>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
-    mut q_fields: Query<(&GeometryHost, Option<&Mesh3d>, Entity), (With<Field>, Without<Host>)>,
-    q_hosts: Query<Ref<FieldGeometry>, (With<Host>, Without<Field>)>,
+    mut q_fields: Query<(&GeometryHost, Option<&Mesh3d>, Entity), With<Field>>,
+    q_hosts: Query<Ref<FieldGeometry>, (With<HostConnection>, Without<Field>)>,
 ) {
-    for (geometry_host, mesh_component, entity) in &mut q_fields {
-        let geometry = match q_hosts.get(geometry_host.0) {
-            Ok(g) => g,
-            Err(e) => {
-                error!(
-                    "Failed to fetch host entity {geometry_host:?} for transfer_field_geometry: {e}"
-                );
-                return;
-            }
+    for (GeometryHost(host_entity), mesh_component, entity) in &mut q_fields {
+        let Ok(host_geometry) = q_hosts.get(*host_entity) else {
+            // The HostConnection is probably missing, so it makes no sense to update the field
+            continue;
         };
 
-        if render_settings.field && (geometry.is_changed() || mesh_component.is_none()) {
+        if render_settings.field && (host_geometry.is_changed() || mesh_component.is_none()) {
             commands.entity(entity).insert((
-                Mesh3d(mesh_assets.add(field_mesh(&geometry))),
+                Mesh3d(mesh_assets.add(field_mesh(&host_geometry))),
                 MeshMaterial3d(white_material.opaque.clone()),
             ));
         }

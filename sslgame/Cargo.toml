@@ -9,6 +9,7 @@ bevy.workspace = true
 earcut.workspace = true
 
 bytes.workspace = true
+derive_more = { workspace = true, features = ["into_iterator"] }
 tracing.workspace = true
 
 async-tungstenite.workspace = true

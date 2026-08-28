@@ -118,19 +118,6 @@ struct ScorePanel {
     stage_text: Entity,
 }
 
-impl Default for ScorePanel {
-    fn default() -> Self {
-        Self {
-            state_source: Entity::PLACEHOLDER,
-            left: Team::Yellow,
-            right: Team::Blue,
-
-            score_text: Entity::PLACEHOLDER,
-            stage_text: Entity::PLACEHOLDER,
-        }
-    }
-}
-
 fn score_panel(state_source: Entity) -> impl Scene {
     bsn! {
         #ScorePanel
@@ -206,21 +193,6 @@ struct TeamPanel {
     fouls_text: Entity,
     yellow_text: Entity,
     red_text: Entity,
-}
-
-impl Default for TeamPanel {
-    fn default() -> Self {
-        Self {
-            state_source: Entity::PLACEHOLDER,
-            team: Team::default(),
-
-            logo: Entity::PLACEHOLDER,
-            name_text: Entity::PLACEHOLDER,
-            fouls_text: Entity::PLACEHOLDER,
-            yellow_text: Entity::PLACEHOLDER,
-            red_text: Entity::PLACEHOLDER,
-        }
-    }
 }
 
 fn team_panel(state_source: Entity, team: Team, right_aligned: bool) -> impl Scene {

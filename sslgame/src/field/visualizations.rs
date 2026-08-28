@@ -8,6 +8,7 @@ use bevy::math::{Quat, Vec3};
 use bevy::mesh::{Mesh, Mesh3d};
 use bevy::pbr::MeshMaterial3d;
 use bevy::prelude::*;
+use derive_more::IntoIterator;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::f32::consts::PI;
@@ -26,17 +27,21 @@ pub struct VisualizationNameMappings(pub VisMappings);
 // ======== Visualization sources ========
 /// The unique ID of this visualization source. Maps to a [VisualizationSourceName] through the [VisualizationNameMappings].
 #[derive(Component, Clone, Debug, PartialEq)]
+#[component(immutable)]
 pub struct VisualizationSourceId(pub u32);
 /// The human-readable name of a [VisualizationSourceId]. Created automatically from the host's [VisualizationNameMappings].
 #[derive(Component, Clone, Debug, PartialEq)]
+#[component(immutable)]
 pub struct VisualizationSourceName(pub String);
 
 // ======== Visualizations ========
 /// The ID of this visualization, unique within its [VisualizationSourceId]. Maps to a [VisualizationName] through the [VisualizationNameMappings].
 #[derive(Component, Clone, Debug, PartialEq)]
+#[component(immutable)]
 pub struct VisualizationId(pub u32);
 /// The human-readable name of a [VisualizationId]. Created automatically from the host's [VisualizationNameMappings].
 #[derive(Component, Clone, Debug, PartialEq)]
+#[component(immutable)]
 pub struct VisualizationName(pub String);
 /// The latest data for a [VisualizationId]. Used to generate the mesh to display on fields.
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -47,17 +52,9 @@ pub struct VisualizationData(Visualization);
 #[relationship(relationship_target = AllHostVisualizations)]
 pub struct VisualizationFromHost(pub Entity);
 /// Host-side counterpart to [VisualizationFromHost]. Direct link to all visualizations of this host, skipping the source entities.
-#[derive(Component, Clone, Debug, PartialEq, Eq)]
+#[derive(Component, IntoIterator, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = VisualizationFromHost, linked_spawn)]
-pub struct AllHostVisualizations(Vec<Entity>);
-impl<'a> IntoIterator for &'a AllHostVisualizations {
-    type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = std::slice::Iter<'a, Entity>;
-    #[inline(always)]
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
+pub struct AllHostVisualizations(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
 /// Field-side counterpart to [VisualizationUsages]. Any entity with this component will automatically get its target's asset children and mesh.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
@@ -65,9 +62,9 @@ impl<'a> IntoIterator for &'a AllHostVisualizations {
 #[require(Transform)]
 pub struct VisualizationInstance(pub Entity);
 /// Host-side counterpart to [VisualizationInstance]. Contains all entities that should be updated from this entity's [VisualizationData].
-#[derive(Component, Clone, Debug, PartialEq, Eq)]
+#[derive(Component, IntoIterator, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = VisualizationInstance, linked_spawn)]
-pub struct VisualizationUsages(Vec<Entity>);
+pub struct VisualizationUsages(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
 /// Adds a [VisualizationName]/[VisualizationSourceName] to each [VisualizationId]/[VisualizationSourceId]
 /// that is present in the provided mappings, for a single host.
@@ -80,11 +77,11 @@ pub(crate) fn update_visualization_names(
     >,
     mut q_vis_sources: Query<(
         &VisualizationSourceId,
-        Option<&mut VisualizationSourceName>,
+        Option<&VisualizationSourceName>,
         Option<&Children>,
         Entity,
     )>,
-    mut q_visualizations: Query<(&VisualizationId, Option<&mut VisualizationName>, Entity)>,
+    mut q_visualizations: Query<(&VisualizationId, Option<&VisualizationName>, Entity)>,
 ) {
     let (cached_mappings, source_entities) = match q_hosts.get_mut(host_entity) {
         Ok(c) => c,
@@ -101,15 +98,9 @@ pub(crate) fn update_visualization_names(
     {
         // Update source name
         if let Some(new_name) = vis_mappings.source.get(&source_id.0) {
-            if let Some(mut source_name) = source_name {
-                if source_name.0 != *new_name {
-                    source_name.0 = new_name.clone();
-                }
-            } else {
-                commands
-                    .entity(source_entity)
-                    .insert(VisualizationSourceName(new_name.clone()));
-            }
+            commands
+                .entity(source_entity)
+                .insert_if_neq(VisualizationSourceName(new_name.clone()));
         } else if source_name.is_some() {
             commands
                 .entity(source_entity)
@@ -120,15 +111,9 @@ pub(crate) fn update_visualization_names(
         let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
         while let Some((vis_id, vis_name, vis_entity)) = vis_iter.fetch_next() {
             if let Some(new_name) = vis_mappings.name.get(&vis_id.0) {
-                if let Some(mut vis_name) = vis_name {
-                    if vis_name.0 != *new_name {
-                        vis_name.0 = new_name.clone();
-                    }
-                } else {
-                    commands
-                        .entity(vis_entity)
-                        .insert(VisualizationName(new_name.clone()));
-                }
+                commands
+                    .entity(vis_entity)
+                    .insert_if_neq(VisualizationName(new_name.clone()));
             } else if vis_name.is_some() {
                 commands.entity(vis_entity).remove::<VisualizationName>();
             }
@@ -227,6 +212,7 @@ pub(crate) fn update_visualizations(
         // Get all new messages for this source. There should only be one, but that isn't actually
         // enforced in the protocol to make minimal host implementations easier.
         let new_source = new_source_list.extract_if(.., |vs| vs.source == source_id.0);
+        // TODO: Despawn if no updates?
         // Merge the visualization messages from all the source messages
         let mut new_vis_map: HashMap<u32, Visualization> = HashMap::new();
         for vis in new_source.flat_map(|vs| vs.visualization) {

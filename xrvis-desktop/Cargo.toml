@@ -8,8 +8,7 @@ rust-version.workspace = true
 3d-panels = []
 
 [dependencies]
-bevy.workspace = true
-bevy-inspector-egui.workspace = true
-bevy_panorbit_camera.workspace = true
+bevy = { workspace = true, features = ["bevy_feathers"] }
+derive_more = { workspace = true, features = ["into_iterator"] }
 
 sslgame.workspace = true
