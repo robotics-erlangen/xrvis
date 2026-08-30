@@ -272,14 +272,21 @@ pub(crate) fn update_visualizations(
         // Spawn new entities for the remaining visualizations
         for new_vis in new_vis_map.into_values() {
             let name = cached_names.and_then(|n| n.0.name.get(&new_vis.id));
-            let mut e = commands.spawn((
-                VisualizationId(new_vis.id),
-                VisualizationFromHost(host_entity),
-                ChildOf(source_entity),
-            ));
-            if let Some(name) = name {
-                e.insert(VisualizationName(name.clone()));
-            }
+            // The name is spawned "atomically" with the id so that On<Added, VisId> observers see both
+            let mut e = if let Some(name) = name {
+                commands.spawn((
+                    VisualizationId(new_vis.id),
+                    VisualizationName(name.clone()),
+                    VisualizationFromHost(host_entity),
+                    ChildOf(source_entity),
+                ))
+            } else {
+                commands.spawn((
+                    VisualizationId(new_vis.id),
+                    VisualizationFromHost(host_entity),
+                    ChildOf(source_entity),
+                ))
+            };
             // Not having shapes or assets means that the visualization was probably excluded by a VisualizationFilter
             if !(new_vis.shape.is_empty() && new_vis.asset.is_empty()) {
                 e.insert(VisualizationData(new_vis));
@@ -293,9 +300,15 @@ pub(crate) fn update_visualizations(
         new_source_list.retain(|vs| vs.source != next_source_id);
 
         let name = cached_names.and_then(|n| n.0.source.get(&next_source_id));
-        let mut e = commands.spawn((VisualizationSourceId(next_source_id), ChildOf(host_entity)));
+        // The name is spawned "atomically" with the id so that On<Added, SourceId> observers see both
         if let Some(name) = name {
-            e.insert(VisualizationSourceName(name.clone()));
+            commands.spawn((
+                VisualizationSourceId(next_source_id),
+                VisualizationSourceName(name.clone()),
+                ChildOf(host_entity),
+            ));
+        } else {
+            commands.spawn((VisualizationSourceId(next_source_id), ChildOf(host_entity)));
         }
 
         // Visualizations for the new source will be filled in with the next update to reduce code duplication

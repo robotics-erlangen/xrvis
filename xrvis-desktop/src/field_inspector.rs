@@ -28,18 +28,6 @@ pub fn scene(field_entity: Entity) -> impl Scene {
     }
 }
 
-/// Used to link UI elements to their in-world counterparts
-/// - Inspector -> Field (Duplicate of [FieldInspector])
-/// - Tab -> Host root
-/// - SourceUI -> Source
-/// - VisUI -> Visualization
-#[derive(Component, FromTemplate, Clone)]
-#[relationship(relationship_target = RepresentedByVisUi)]
-struct VisUiRepresentsEntity(Entity);
-#[derive(Component, IntoIterator, Clone)]
-#[relationship_target(relationship = VisUiRepresentsEntity, linked_spawn)]
-struct RepresentedByVisUi(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
-
 /// References the field that this inspector interacts with. Should always be used in [bsn!], so the [FieldInspectorTemplate] can initialize the UI.
 #[derive(Component, Clone, Copy)]
 #[relationship(relationship_target = FieldInspectedBy)]
@@ -108,6 +96,28 @@ impl Template for FieldInspectorTemplate {
         }
     }
 }
+
+// ======== Util relationships ========
+
+/// Reference to the [Text] component for this UI element. Useful to avoid traversing the internal hierarchy of premade components like [FeathersCheckbox].
+#[derive(Component, Clone, Copy)]
+#[relationship_target(relationship = TextOfComponent)]
+struct ComponentText(Entity);
+#[derive(Component, FromTemplate, Clone, Copy)]
+#[relationship(relationship_target = ComponentText)]
+struct TextOfComponent(pub Entity);
+
+/// Used to link UI elements to their in-world counterparts
+/// - Inspector -> Field (Duplicate of [FieldInspector])
+/// - Tab -> Host root
+/// - SourceUI -> Source
+/// - VisUI -> Visualization
+#[derive(Component, FromTemplate, Clone)]
+#[relationship(relationship_target = RepresentedByVisUi)]
+struct VisUiRepresentsEntity(Entity);
+#[derive(Component, IntoIterator, Clone)]
+#[relationship_target(relationship = VisUiRepresentsEntity, linked_spawn)]
+struct RepresentedByVisUi(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
 // ======== Initial state ========
 
@@ -197,11 +207,22 @@ fn vis_list_for_host(
     q_parent: Query<&ChildOf>,
 ) -> impl Scene + use<> {
     let host_children = q_children.get(host_entity).into_iter().flatten();
-    let scene_list = q_source
+    let source_ui_scenes = q_source
         .iter_many(host_children)
+        .sort_unstable_by::<Option<&VisualizationSourceName>>(|name_a, name_b| {
+            name_a
+                .map(|a| a.0.to_lowercase())
+                .cmp(&name_b.map(|b| b.0.to_lowercase()))
+        })
         .map(|(source_id, source_name, source_entity, source_children)| {
-            let vis_uis = q_vis
+            // Build the visualization list for this source
+            let vis_ui_scenes = q_vis
                 .iter_many(source_children.into_iter().flatten())
+                .sort_unstable_by::<Option<&VisualizationName>>(|name_a, name_b| {
+                    name_a
+                        .map(|a| a.0.to_lowercase())
+                        .cmp(&name_b.map(|b| b.0.to_lowercase()))
+                })
                 .map(|(vis_id, vis_name, vis_usages, vis_entity)| {
                     let checked = q_parent
                         .iter_many(vis_usages.into_iter().flatten())
@@ -218,17 +239,18 @@ fn vis_list_for_host(
                 })
                 .collect::<Vec<_>>();
 
-            let (source_id, source_name) = (source_id.clone(), source_name.cloned());
-            bsn! {
-                source_ui_scene(source_entity, source_id, source_name)
-                Children [ {vis_uis} ]
-            }
+            source_ui_scene(
+                source_entity,
+                source_id.clone(),
+                source_name.cloned(),
+                vis_ui_scenes,
+            )
         })
         .collect::<Vec<_>>();
 
     bsn! {
         @FeathersListView {
-            @rows: {Box::new(scene_list) as Box<dyn SceneList>},
+            @rows: {Box::new(source_ui_scenes) as Box<dyn SceneList>},
         }
         Node {
             overflow: Overflow::hidden(),
@@ -293,7 +315,8 @@ fn on_vis_toggled(
     let vis_entity = q_vis_ui.get(vis_ui_toggled.source).unwrap().0;
 
     // Traverse UI hierarchy
-    let source_ui_entity = q_parent.get(vis_ui_toggled.source).unwrap().0.0;
+    let vis_list_container = q_parent.get(vis_ui_toggled.source).unwrap().0.0;
+    let source_ui_entity = q_parent.get(vis_list_container).unwrap().0.0;
     let listview_content_entity = q_parent.get(source_ui_entity).unwrap().0.0;
     let listview_entity = q_parent.get(listview_content_entity).unwrap().0.0;
     let inspector_entity = q_parent.get(listview_entity).unwrap().0.0;
@@ -321,11 +344,13 @@ fn source_ui_scene(
     source_entity: Entity,
     source_id: VisualizationSourceId,
     source_name: Option<VisualizationSourceName>,
+    vis_list: impl SceneList,
 ) -> impl Scene {
     let label = source_name
         .map(|name| name.0)
         .unwrap_or_else(|| format!("Source {}", source_id.0));
     bsn! {
+        #Root
         VisUiRepresentsEntity(source_entity)
         Node {
             width: percent(100),
@@ -341,7 +366,15 @@ fn source_ui_scene(
             }
             Children [
                 @FeathersDisclosureToggle,
-                Text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))},
+                Text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root),
+            ],
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+            }
+            Children [
+                {vis_list}
             ]
         ]
     }
@@ -365,20 +398,20 @@ fn on_new_vis_source(
         return;
     };
     for inspector_entity in inspectors_ref.iter() {
-        let source_ui = commands
+        let listview_entity = q_children.get(inspector_entity).unwrap()[1];
+        let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
+        let new_entry = commands
             .spawn_scene(source_ui_scene(
                 vis_added.entity,
                 source_id.clone(),
                 source_name.cloned(),
+                bsn_list![],
             ))
             .id();
-        let listview_entity = q_children.get(inspector_entity).unwrap()[1];
-        let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
+
         commands
             .entity(listview_content_entity)
-            .add_child(source_ui);
-
-        // TODO: Sort source entries
+            .queue(insert_child_sorted(new_entry));
     }
 }
 
@@ -393,9 +426,10 @@ fn vis_ui_scene(
         .map(|name| name.0)
         .unwrap_or_else(|| format!("Visualization {}", vis_id.0));
     bsn! {
+        #Root
         VisUiRepresentsEntity(vis_entity)
         @FeathersCheckbox {
-            @caption: bsn! { Text(label) ThemedText },
+            @caption: bsn! { Text(label) ThemedText TextOfComponent(#Root) },
         }
         on(on_vis_toggled)
     }
@@ -406,21 +440,24 @@ fn on_new_vis(
     mut commands: Commands,
     q_vis: Query<(&VisualizationId, Option<&VisualizationName>, &ChildOf)>,
     q_source: Query<&RepresentedByVisUi, With<VisualizationSourceId>>,
+    q_children: Query<&Children>,
 ) {
     let (vis_id, vis_name, source_ref) = q_vis.get(vis_added.entity).unwrap();
 
     // FIXME: If this vis and its source are both added at the same time, it's possible that the observers for both are batched together and the commands for spawning the source ui might not be applied yet, causing this visualization to be lost
     for source_ui_entity in q_source.get(source_ref.0).into_iter().flatten() {
-        let vis_ui = commands
+        let vis_list_container = q_children.get(*source_ui_entity).unwrap()[1];
+        let new_entry = commands
             .spawn_scene(vis_ui_scene(
                 vis_added.entity,
                 vis_id.clone(),
                 vis_name.cloned(),
             ))
             .id();
-        commands.entity(*source_ui_entity).add_child(vis_ui);
 
-        // TODO: Sort vis entries
+        commands
+            .entity(vis_list_container)
+            .queue(insert_child_sorted(new_entry));
     }
 }
 
@@ -430,7 +467,7 @@ fn on_source_name_insert(
     name_inserted: On<Insert, VisualizationSourceName>,
     mut commands: Commands,
     q_source: Query<(&VisualizationSourceName, &RepresentedByVisUi)>,
-    q_children: Query<&Children>,
+    q_entry: Query<(&ComponentText, &ChildOf)>,
 ) {
     let Ok((new_name, ui_ref)) = q_source.get(name_inserted.entity) else {
         // Failed either because this source is not shown on any inspector, or because the component was
@@ -439,13 +476,15 @@ fn on_source_name_insert(
         return;
     };
     for ui_entity in ui_ref {
-        let header_row_entity = q_children.get(*ui_entity).unwrap()[0];
-        let label_entity = q_children.get(header_row_entity).unwrap()[1];
+        let (label_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
-            .entity(label_entity)
+            .entity(label_ref.0)
             .insert(Text(new_name.0.clone()));
 
-        // TODO: Sort source entries
+        commands.entity(*ui_entity).remove::<ChildOf>();
+        commands
+            .entity(container_ref.0)
+            .queue(insert_child_sorted(*ui_entity));
     }
 }
 
@@ -453,7 +492,7 @@ fn on_vis_name_insert(
     name_inserted: On<Insert, VisualizationName>,
     mut commands: Commands,
     q_vis: Query<(&VisualizationName, &RepresentedByVisUi)>,
-    q_children: Query<&Children>,
+    q_entry: Query<(&ComponentText, &ChildOf)>,
 ) {
     let Ok((new_name, ui_ref)) = q_vis.get(name_inserted.entity) else {
         // Failed either because this visualization is not shown on any inspector, or because the component
@@ -462,11 +501,45 @@ fn on_vis_name_insert(
         return;
     };
     for ui_entity in ui_ref {
-        let caption_entity = q_children.get(*ui_entity).unwrap()[1]; // @FeathersCheckbox implementation detail
+        let (caption_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
-            .entity(caption_entity)
+            .entity(caption_ref.0)
             .insert(Text(new_name.0.clone()));
 
-        // TODO: Sort vis entries
+        commands.entity(*ui_entity).remove::<ChildOf>();
+        commands
+            .entity(container_ref.0)
+            .queue(insert_child_sorted(*ui_entity));
+    }
+}
+
+/// Inserts a child entity sorted by its [ComponentText].
+fn insert_child_sorted(child: Entity) -> impl EntityCommand {
+    move |mut parent: EntityWorldMut| -> Result<(), BevyError> {
+        let world = parent.world();
+
+        let new_text = world
+            .get::<ComponentText>(child)
+            .and_then(|t_ref| world.get::<Text>(t_ref.0).map(|t| t.0.to_lowercase()));
+
+        let index = parent
+            .get::<Children>()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .find_map(|(i, e)| {
+                let this_text = world
+                    .get::<ComponentText>(*e)
+                    .and_then(|t_ref| world.get::<Text>(t_ref.0).map(|t| t.0.to_lowercase()));
+                (new_text < this_text).then_some(i)
+            });
+
+        if let Some(i) = index {
+            parent.insert_child(i, child);
+        } else {
+            parent.add_child(child);
+        }
+
+        Ok(())
     }
 }
