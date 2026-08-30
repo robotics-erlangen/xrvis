@@ -66,6 +66,10 @@ pub struct VisualizationInstance(pub Entity);
 #[relationship_target(relationship = VisualizationInstance, linked_spawn)]
 pub struct VisualizationUsages(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
+/// Marks that a visualization was not included in the last [VisualizationUpdate].
+#[derive(Component)]
+pub struct InactiveVisualization;
+
 /// Adds a [VisualizationName]/[VisualizationSourceName] to each [VisualizationId]/[VisualizationSourceId]
 /// that is present in the provided mappings, for a single host.
 pub(crate) fn update_visualization_names(
@@ -212,7 +216,8 @@ pub(crate) fn update_visualizations(
         // Get all new messages for this source. There should only be one, but that isn't actually
         // enforced in the protocol to make minimal host implementations easier.
         let new_source = new_source_list.extract_if(.., |vs| vs.source == source_id.0);
-        // TODO: Despawn if no updates?
+        // Sources without messages are kept, but all their inner visualizations will be marked as inactive
+
         // Merge the visualization messages from all the source messages
         let mut new_vis_map: HashMap<u32, Visualization> = HashMap::new();
         for vis in new_source.flat_map(|vs| vs.visualization) {
@@ -243,10 +248,16 @@ pub(crate) fn update_visualizations(
             }
 
             let Some(new_vis) = new_vis_map.remove(&vis_id.0) else {
-                // No messages for this vis -> despawn
-                commands.entity(vis_entity).despawn();
+                // No messages for this vis -> mark inactive
+                commands
+                    .entity(vis_entity)
+                    .insert(InactiveVisualization)
+                    .remove::<VisualizationData>();
                 continue;
             };
+            commands
+                .entity(vis_entity)
+                .remove::<InactiveVisualization>();
 
             // Update vis data, but only if there is at least one usage
             let has_usage = vis_usages.is_some_and(|u| !u.0.is_empty());
@@ -329,6 +340,7 @@ fn update_visualization_instances(
 ) {
     for (VisualizationInstance(vis_data_entity), vis_instance_entity) in q_vis_instances {
         let Ok(vis_data) = q_vis_data.get(*vis_data_entity) else {
+            commands.entity(vis_instance_entity).remove::<Mesh3d>();
             continue;
         };
 

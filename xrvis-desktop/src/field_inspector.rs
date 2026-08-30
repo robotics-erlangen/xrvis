@@ -1,9 +1,11 @@
+use bevy::app::PropagateOver;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers::controls::{
     ButtonVariant, FeathersButton, FeathersCheckbox, FeathersDisclosureToggle, FeathersListView,
 };
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
+use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemedText};
 use bevy::feathers::tokens;
+use bevy::feathers::tokens::CHECKBOX_TEXT_DISABLED;
 use bevy::prelude::*;
 use bevy::scene::SceneFunction;
 use bevy::ui::Checked;
@@ -11,8 +13,8 @@ use bevy::ui_widgets::ValueChange;
 use derive_more::IntoIterator;
 use sslgame::field::hosts::{BlueRobotHost, HostConnection, YellowRobotHost};
 use sslgame::field::visualizations::{
-    VisualizationId, VisualizationInstance, VisualizationName, VisualizationSourceId,
-    VisualizationSourceName, VisualizationUsages,
+    InactiveVisualization, VisualizationId, VisualizationInstance, VisualizationName,
+    VisualizationSourceId, VisualizationSourceName, VisualizationUsages,
 };
 
 pub fn field_inspector_plugin(app: &mut App) {
@@ -20,6 +22,8 @@ pub fn field_inspector_plugin(app: &mut App) {
     app.add_observer(on_new_vis);
     app.add_observer(on_source_name_insert);
     app.add_observer(on_vis_name_insert);
+    app.add_observer(on_vis_inactive);
+    app.add_observer(on_vis_active);
 }
 
 pub fn scene(field_entity: Entity) -> impl Scene {
@@ -514,6 +518,40 @@ fn on_vis_name_insert(
         commands
             .entity(container_ref.0)
             .queue(insert_child_sorted(*ui_entity));
+    }
+}
+
+// ======== Inactive markings ========
+
+fn on_vis_inactive(
+    vis_inactive: On<Add, InactiveVisualization>,
+    mut commands: Commands,
+    q_vis: Query<&RepresentedByVisUi>,
+    q_text_ref: Query<&ComponentText>,
+) {
+    for ui_entity in q_vis.get(vis_inactive.entity).into_iter().flatten() {
+        let label_ref = q_text_ref.get(*ui_entity).unwrap();
+        // PropagateOver temporarily disables text color inheritance
+        commands
+            .entity(label_ref.0)
+            .insert(PropagateOver::<TextColor>::default())
+            .insert(ThemeTextColor(CHECKBOX_TEXT_DISABLED));
+    }
+}
+
+fn on_vis_active(
+    vis_active: On<Remove, InactiveVisualization>,
+    mut commands: Commands,
+    q_vis: Query<&RepresentedByVisUi>,
+    q_text_ref: Query<&ComponentText>,
+) {
+    for ui_entity in q_vis.get(vis_active.entity).into_iter().flatten() {
+        let label_ref = q_text_ref.get(*ui_entity).unwrap();
+        // Removing PropagateOver re-triggers propagation
+        commands
+            .entity(label_ref.0)
+            .try_remove::<ThemeTextColor>()
+            .try_remove::<PropagateOver<TextColor>>();
     }
 }
 
