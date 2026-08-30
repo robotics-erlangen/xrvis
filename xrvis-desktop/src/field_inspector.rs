@@ -389,15 +389,19 @@ fn on_new_vis_source(
         &ChildOf,
     )>,
     q_host: Query<&RepresentedByVisUi, With<HostConnection>>,
-    q_children: Query<&Children>,
+    (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
 ) {
     let (source_id, source_name, host_ref) = q_source.get(vis_added.entity).unwrap();
 
-    let Ok(inspectors_ref) = q_host.get(host_ref.0) else {
+    let Ok(host_tabs_ref) = q_host.get(host_ref.0) else {
         // No relevant inspector -> Skip
         return;
     };
-    for inspector_entity in inspectors_ref.iter() {
+    for host_tab_ref in host_tabs_ref.iter() {
+        // Inspector <- Host tab
+        let host_tab_row_entity = q_parent.get(host_tab_ref).unwrap().0;
+        let inspector_entity = q_parent.get(host_tab_row_entity).unwrap().0;
+        // Inspector -> Listview content (@FeathersListView implementation detail)
         let listview_entity = q_children.get(inspector_entity).unwrap()[1];
         let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
         let new_entry = commands
