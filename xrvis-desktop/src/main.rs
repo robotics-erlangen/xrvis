@@ -30,7 +30,6 @@ fn main() {
     });
     app.add_plugins(bevy_inspector_egui::bevy_egui::EguiPlugin::default());
     app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());*/
-    //app.register_required_components::<Field, VisSelectionUiTab>();
 
     #[cfg(feature = "3d-panels")]
     {
@@ -43,7 +42,7 @@ fn main() {
     app.run();
 }
 
-fn startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn startup(mut commands: Commands) {
     commands.spawn((
         Transform {
             translation: Vec3::new(0.0, 5.0, 5.0),
@@ -58,15 +57,14 @@ fn startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     // Spawn UI
     commands.spawn(Camera2d);
-
-    let sidebar = commands.spawn_scene(sidebar::scene()).id();
-    let viewport = viewport::spawn(&mut commands, &mut images);
-    commands
-        .spawn_scene(bsn! {
-            Node {
-                width: percent(100),
-                height: percent(100),
-            }
-        })
-        .add_children(&[sidebar, viewport]);
+    commands.spawn_scene(bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+        }
+        Children [
+            sidebar::scene(),
+            viewport::scene(),
+        ]
+    });
 }
