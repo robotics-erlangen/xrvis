@@ -73,7 +73,6 @@ impl Template for FieldInspectorTemplate {
                     row_gap: px(6),
                     padding: px(6),
                     border: {UiRect::right(px(1))},
-                    overflow: Overflow::scroll_y(),
                 }
                 VisUiRepresentsEntity(field_entity)
                 ThemeBackgroundColor(tokens::PANE_BODY_BG)
@@ -253,13 +252,14 @@ fn vis_list_for_host(
         .collect::<Vec<_>>();
 
     bsn! {
-        @FeathersListView {
-            @rows: {Box::new(source_ui_scenes) as Box<dyn SceneList>},
-        }
         Node {
-            overflow: Overflow::hidden(),
-            flex_grow: 1.0,
+            height: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
         }
+        Children [
+            {source_ui_scenes}
+        ]
     }
 }
 
@@ -269,8 +269,7 @@ fn on_host_tab_click(
     click: On<Pointer<Click>>,
     mut commands: Commands,
     q_vis_ui: Query<&VisUiRepresentsEntity>,
-    q_parent: Query<&ChildOf>,
-    q_children: Query<&Children>,
+    (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
 ) {
     let host_tab_container_entity = q_parent.get(click.entity).unwrap().0;
     let inspector_entity = q_parent.get(host_tab_container_entity).unwrap().0;
@@ -308,6 +307,36 @@ fn on_host_tab_click(
     }
 }
 
+fn on_disclosure_click(
+    click: On<ValueChange<bool>>,
+    mut commands: Commands,
+    (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
+    mut q_node: Query<&mut Node>,
+) {
+    let source_header = q_parent.get(click.source).unwrap().0;
+    let source = q_parent.get(source_header).unwrap().0;
+    let vis_list = q_children.get(source).unwrap()[1];
+
+    if click.value {
+        commands.entity(click.source).insert(Checked);
+        let mut vis_list_node = q_node.get_mut(vis_list).unwrap();
+        vis_list_node.display = Display::Flex;
+        let mut source_node = q_node.get_mut(source).unwrap();
+        source_node.flex_grow = 1.0;
+        source_node.flex_shrink = 1.0;
+        source_node.flex_basis = px(0);
+        //TODO: source_node.max_height = Val::MaxContent; // This might keep short lists from being stretched, but it's not supported in bevy yet
+    } else {
+        commands.entity(click.source).remove::<Checked>();
+        let mut vis_list_node = q_node.get_mut(vis_list).unwrap();
+        vis_list_node.display = Display::None;
+        let mut source_node = q_node.get_mut(source).unwrap();
+        source_node.flex_grow = 0.0;
+        source_node.flex_shrink = 0.0;
+        source_node.flex_basis = Val::Auto;
+    }
+}
+
 fn on_vis_toggled(
     vis_ui_toggled: On<ValueChange<bool>>,
     mut commands: Commands,
@@ -342,7 +371,7 @@ fn on_vis_toggled(
     }
 }
 
-// ======== New source ======== TODO: Collapsible source sections
+// ======== New source ========
 
 fn source_ui_scene(
     source_entity: Entity,
@@ -353,33 +382,39 @@ fn source_ui_scene(
     let label = source_name
         .map(|name| name.0)
         .unwrap_or_else(|| format!("Source {}", source_id.0));
+
     bsn! {
         #Root
         VisUiRepresentsEntity(source_entity)
         Node {
+            overflow: Overflow::hidden_y(),
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
+            row_gap: px(4),
+
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            flex_basis: px(0.0),
         }
         Children [
             Node {
                 width: percent(100),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Start,
+                flex_shrink: 0.0,
                 column_gap: px(6),
             }
             Children [
-                @FeathersDisclosureToggle,
+                @FeathersDisclosureToggle Checked on(on_disclosure_click),
                 Text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root),
             ],
-            Node {
-                width: percent(100),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
+            @FeathersListView {
+                @rows: {Box::new(vis_list) as Box<dyn SceneList>},
             }
-            Children [
-                {vis_list}
-            ]
+            Node {
+                overflow: Overflow::hidden_y(),
+                flex_grow: 1.0,
+            }
         ]
     }
 }
@@ -406,8 +441,7 @@ fn on_new_vis_source(
         let host_tab_row_entity = q_parent.get(host_tab_ref).unwrap().0;
         let inspector_entity = q_parent.get(host_tab_row_entity).unwrap().0;
         // Inspector -> Listview content (@FeathersListView implementation detail)
-        let listview_entity = q_children.get(inspector_entity).unwrap()[1];
-        let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
+        let source_container_entity = q_children.get(inspector_entity).unwrap()[1];
         let new_entry = commands
             .spawn_scene(source_ui_scene(
                 vis_added.entity,
@@ -418,7 +452,7 @@ fn on_new_vis_source(
             .id();
 
         commands
-            .entity(listview_content_entity)
+            .entity(source_container_entity)
             .queue(insert_child_sorted(new_entry));
     }
 }
@@ -439,6 +473,9 @@ fn vis_ui_scene(
         @FeathersCheckbox {
             @caption: bsn! { Text(label) ThemedText TextOfComponent(#Root) },
         }
+        Node {
+            padding: UiRect::vertical(px(3)),
+        }
         on(on_vis_toggled)
     }
 }
@@ -454,7 +491,8 @@ fn on_new_vis(
 
     // FIXME: If this vis and its source are both added at the same time, it's possible that the observers for both are batched together and the commands for spawning the source ui might not be applied yet, causing this visualization to be lost
     for source_ui_entity in q_source.get(source_ref.0).into_iter().flatten() {
-        let vis_list_container = q_children.get(*source_ui_entity).unwrap()[1];
+        let listview_entity = q_children.get(*source_ui_entity).unwrap()[1];
+        let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
         let new_entry = commands
             .spawn_scene(vis_ui_scene(
                 vis_added.entity,
@@ -464,7 +502,7 @@ fn on_new_vis(
             .id();
 
         commands
-            .entity(vis_list_container)
+            .entity(listview_content_entity)
             .queue(insert_child_sorted(new_entry));
     }
 }
