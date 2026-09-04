@@ -1,11 +1,11 @@
+use crate::sidebar::{ComponentText, TextOfComponent};
 use bevy::app::PropagateOver;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers::controls::{
     ButtonVariant, FeathersButton, FeathersCheckbox, FeathersDisclosureToggle, FeathersListView,
 };
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemedText};
-use bevy::feathers::tokens;
-use bevy::feathers::tokens::CHECKBOX_TEXT_DISABLED;
+use bevy::feathers::tokens::{CHECKBOX_TEXT_DISABLED, PANE_BODY_BG, PANE_HEADER_BORDER};
 use bevy::prelude::*;
 use bevy::scene::SceneFunction;
 use bevy::ui::Checked;
@@ -17,7 +17,7 @@ use sslgame::field::visualizations::{
     VisualizationSourceId, VisualizationSourceName, VisualizationUsages,
 };
 
-pub fn field_inspector_plugin(app: &mut App) {
+pub fn vis_inspector_plugin(app: &mut App) {
     app.add_observer(on_new_vis_source);
     app.add_observer(on_new_vis);
     app.add_observer(on_source_name_insert);
@@ -28,28 +28,28 @@ pub fn field_inspector_plugin(app: &mut App) {
 
 pub fn scene(field_entity: Entity) -> impl Scene {
     bsn! {
-        FieldInspector { field_entity }
+        VisInspector { field_entity }
     }
 }
 
-/// References the field that this inspector interacts with. Should always be used in [bsn!], so the [FieldInspectorTemplate] can initialize the UI.
+/// References the field that this inspector interacts with. Should always be used in [bsn!], so the [VisInspectorTemplate] can initialize the UI.
 #[derive(Component, Clone, Copy)]
 #[relationship(relationship_target = FieldInspectedBy)]
-struct FieldInspector(Entity);
+struct VisInspector(Entity);
 #[derive(Component, Clone, Copy)]
-#[relationship_target(relationship = FieldInspector, linked_spawn)]
+#[relationship_target(relationship = VisInspector, linked_spawn)]
 struct FieldInspectedBy(Entity);
 
-/// Custom template for [FieldInspector] that creates the initial UI using the current state of the referenced field.
+/// Custom template for [VisInspector] that creates the initial UI using the current state of the referenced field.
 #[derive(Default)]
-struct FieldInspectorTemplate {
+struct VisInspectorTemplate {
     field_entity: EntityTemplate,
 }
-impl FromTemplate for FieldInspector {
-    type Template = FieldInspectorTemplate;
+impl FromTemplate for VisInspector {
+    type Template = VisInspectorTemplate;
 }
-impl Template for FieldInspectorTemplate {
-    type Output = FieldInspector;
+impl Template for VisInspectorTemplate {
+    type Output = VisInspector;
 
     fn build_template(&self, context: &mut TemplateContext) -> Result<Self::Output> {
         let field_entity = self.field_entity.build_template(context)?;
@@ -75,8 +75,8 @@ impl Template for FieldInspectorTemplate {
                     border: {UiRect::right(px(1))},
                 }
                 VisUiRepresentsEntity(field_entity)
-                ThemeBackgroundColor(tokens::PANE_BODY_BG)
-                ThemeBorderColor(tokens::PANE_HEADER_DIVIDER)
+                ThemeBackgroundColor(PANE_BODY_BG)
+                ThemeBorderColor(PANE_HEADER_BORDER)
                 Children [
                     (
                         Node {
@@ -90,7 +90,7 @@ impl Template for FieldInspectorTemplate {
             }
         });
         context.entity.apply_scene(scene)?;
-        Ok(FieldInspector(field_entity))
+        Ok(VisInspector(field_entity))
     }
 
     fn clone_template(&self) -> Self {
@@ -102,16 +102,8 @@ impl Template for FieldInspectorTemplate {
 
 // ======== Util relationships ========
 
-/// Reference to the [Text] component for this UI element. Useful to avoid traversing the internal hierarchy of premade components like [FeathersCheckbox].
-#[derive(Component, Clone, Copy)]
-#[relationship_target(relationship = TextOfComponent)]
-struct ComponentText(Entity);
-#[derive(Component, FromTemplate, Clone, Copy)]
-#[relationship(relationship_target = ComponentText)]
-struct TextOfComponent(pub Entity);
-
 /// Used to link UI elements to their in-world counterparts
-/// - Inspector -> Field (Duplicate of [FieldInspector])
+/// - Inspector -> Field (Duplicate of [VisInspector])
 /// - Tab -> Host root
 /// - SourceUI -> Source
 /// - VisUI -> Visualization
@@ -342,7 +334,7 @@ fn on_vis_toggled(
     mut commands: Commands,
     q_vis_ui: Query<&VisUiRepresentsEntity>,
     q_parent: Query<(&ChildOf, Entity)>,
-    q_field_inspector: Query<&FieldInspector>,
+    q_field_inspector: Query<&VisInspector>,
     q_vis_usages: Query<&VisualizationUsages>,
 ) {
     let vis_entity = q_vis_ui.get(vis_ui_toggled.source).unwrap().0;

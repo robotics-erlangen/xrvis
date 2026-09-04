@@ -79,7 +79,7 @@ impl Template for ViewportTemplate {
     }
 
     fn clone_template(&self) -> Self {
-        ViewportTemplate
+        Self
     }
 }
 

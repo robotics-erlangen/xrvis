@@ -1,5 +1,3 @@
-mod field_inspector;
-mod host_manager;
 mod icons;
 mod sidebar;
 mod viewport;
@@ -19,8 +17,6 @@ fn main() {
     app.insert_resource(UiTheme(create_dark_theme()));
     app.add_plugins(icons::icons_plugin);
     app.add_plugins(sidebar::sidebar_plugin);
-    app.add_plugins(field_inspector::field_inspector_plugin);
-    app.add_plugins(host_manager::host_manager_plugin);
     app.add_plugins(viewport::viewport_plugin);
 
     // Dev plugins

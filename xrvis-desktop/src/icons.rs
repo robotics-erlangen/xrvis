@@ -12,10 +12,9 @@ pub fn icons_plugin(app: &mut App) {
     app.insert_resource(IconFont(icon_handle));
 }
 
-pub fn icon(glyph: impl Into<String>, size: Val) -> impl Scene {
-    let glyph = glyph.into();
+pub fn icon(glyph: lucide_icons::Icon, size: Val) -> impl Scene {
     bsn! {
-        Text(glyph)
+        Text({glyph.unicode()})
         ~IconFontTemplate(size)
     }
 }
