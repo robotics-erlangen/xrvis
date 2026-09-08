@@ -1,6 +1,6 @@
+use crate::ui::tokens;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use bevy::feathers::tokens;
 use bevy::prelude::*;
 
 pub fn robots_inspector_plugin(app: &mut App) {}
@@ -38,8 +38,8 @@ impl Template for RobotsInspectorTemplate {
                 padding: px(6),
                 border: {UiRect::right(px(1))},
             }
-            ThemeBackgroundColor(tokens::PANE_BODY_BG)
-            ThemeBorderColor(tokens::PANE_HEADER_BORDER)
+            ThemeBackgroundColor(tokens::PANEL_BG)
+            ThemeBorderColor(tokens::PANEL_BORDER)
             Children [
             ]
         };

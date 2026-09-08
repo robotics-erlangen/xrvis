@@ -1,10 +1,9 @@
 use crate::icons::icon;
 use crate::sidebar::FieldId;
-use bevy::color::palettes::tailwind::{GREEN_500, RED_500};
+use crate::ui::tokens;
 use bevy::ecs::template::TemplateContext;
 use bevy::feathers::controls::{ButtonVariant, FeathersButton};
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use bevy::feathers::tokens;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use derive_more::IntoIterator;
@@ -93,8 +92,8 @@ impl Template for HostManagerTemplate {
                 border: {UiRect::right(px(1))},
                 overflow: Overflow::scroll_y(),
             }
-            ThemeBackgroundColor(tokens::PANE_BODY_BG)
-            ThemeBorderColor(tokens::PANE_HEADER_DIVIDER)
+            ThemeBackgroundColor(tokens::PANEL_BG)
+            ThemeBorderColor(tokens::PANEL_BORDER)
             Children [
                 {children}
             ]
@@ -199,9 +198,13 @@ fn conn_indicator_scene(connected: bool, spawned_as: Option<u8>) -> impl Scene {
 }
 
 fn conn_indicator_connected_patch(connected: bool) -> impl Scene {
-    let color = if connected { GREEN_500 } else { RED_500 };
+    let color = if connected {
+        tokens::GREEN
+    } else {
+        tokens::RED
+    };
     bsn! {
-        BackgroundColor(color)
+        ThemeBackgroundColor(color)
     }
 }
 

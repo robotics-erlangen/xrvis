@@ -1,9 +1,9 @@
 mod icons;
 mod sidebar;
+mod ui;
 mod viewport;
 
 use bevy::feathers::FeathersPlugins;
-use bevy::feathers::dark_theme::create_dark_theme;
 use bevy::feathers::theme::UiTheme;
 use bevy::prelude::*;
 use sslgame::ssl_game_plugin;
@@ -14,7 +14,8 @@ fn main() {
     app.add_plugins((DefaultPlugins, FeathersPlugins));
     app.add_plugins(ssl_game_plugin);
 
-    app.insert_resource(UiTheme(create_dark_theme()));
+    app.insert_resource(UiTheme(ui::theme::extended_dark_theme()));
+    app.add_plugins(ui::ui_plugin);
     app.add_plugins(icons::icons_plugin);
     app.add_plugins(sidebar::sidebar_plugin);
     app.add_plugins(viewport::viewport_plugin);

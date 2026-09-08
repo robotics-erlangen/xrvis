@@ -1,8 +1,8 @@
-use bevy::ecs::system::{IntoObserverSystem, ObserverSystem};
+use crate::icons::icon;
+use crate::ui::{ImmediateActivate, TextOfComponent, regular_text, tokens};
 use bevy::feathers::controls::{ButtonVariant, FeathersButton};
 use bevy::feathers::cursor::EntityCursor;
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use bevy::feathers::tokens;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
@@ -11,9 +11,21 @@ mod host_manager;
 mod robots_inspector;
 mod vis_inspector;
 
-#[derive(Clone, Copy, Debug)]
+pub fn sidebar_plugin(app: &mut App) {
+    app.add_plugins(host_manager::host_manager_plugin);
+    app.add_plugins(robots_inspector::robots_inspector_plugin);
+    app.add_plugins(vis_inspector::vis_inspector_plugin);
+
+    app.add_observer(on_field_create);
+}
+
+// ======== Inspector ========
+
+/// On a [Sidebar], it stores the last selected inspector. On an inspector button, it marks the inspector this button spawns.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 enum InspectorType {
     Robots,
+    #[default]
     Vis,
 }
 
@@ -31,49 +43,27 @@ impl InspectorType {
             InspectorType::Vis => Box::new(vis_inspector::scene(field_entity)),
         }
     }
-}
 
-// ======== Util ========
-
-/// Reference to the [Text] component for this UI element. Useful to avoid traversing the internal hierarchy of premade components like [FeathersCheckbox].
-#[derive(Component, Clone, Copy)]
-#[relationship_target(relationship = TextOfComponent)]
-struct ComponentText(Entity);
-#[derive(Component, FromTemplate, Clone, Copy)]
-#[relationship(relationship_target = ComponentText)]
-struct TextOfComponent(pub Entity);
-
-/// Triggers [Activate] when added, useful for simulate an immediate click when spawning a button.
-#[derive(Component, Clone, Copy, Default)]
-struct ImmediateActivate;
-
-fn handle_immediate_activate(
-    mut commands: Commands,
-    q_buttons: Query<Entity, (With<ImmediateActivate>, Added<ImmediateActivate>)>, // With<> is here because Added<> is slow on its own
-) {
-    for entity in q_buttons {
-        commands.entity(entity).remove::<ImmediateActivate>();
-        commands.trigger(Activate { entity });
+    fn all() -> impl Iterator<Item = Self> {
+        use InspectorType::*;
+        vec![Robots, Vis].into_iter()
     }
 }
 
-// ======== Sidebar ========
-
-pub fn sidebar_plugin(app: &mut App) {
-    app.add_plugins(host_manager::host_manager_plugin);
-    app.add_plugins(robots_inspector::robots_inspector_plugin);
-    app.add_plugins(vis_inspector::vis_inspector_plugin);
-
-    app.add_observer(on_field_create);
-    app.add_systems(PostUpdate, handle_immediate_activate);
-}
-
-#[derive(Component, Clone, Default)]
-struct Sidebar;
-
+/// Component for fields stores how it should be displayed in the sidebar.
 #[derive(Component, Clone, Default)]
 #[component(immutable)]
 pub struct FieldId(pub u8);
+
+// ======== Sidebar ========
+
+/// Marker component for the sidebar column
+#[derive(Component, Clone, Default)]
+struct Sidebar;
+
+/// Marker component for expanded field entries. There should only ever be one expanded entry in the sidebar, and it should be the first child.
+#[derive(Component, Clone, Default)]
+struct ExpandedFieldEntry;
 
 #[derive(Component, FromTemplate, Clone)]
 #[relationship(relationship_target = RepresentedBySidebarEntry)]
@@ -89,7 +79,7 @@ pub fn scene() -> impl Scene {
                 width: px(1),
                 height: percent(100),
             }
-            ThemeBackgroundColor(tokens::PANE_HEADER_DIVIDER)
+            ThemeBackgroundColor(tokens::PANEL_BORDER)
         }
     }
 
@@ -102,6 +92,7 @@ pub fn scene() -> impl Scene {
             (
                 #Sidebar
                 Sidebar
+                InspectorType::default()
                 Node {
                     width: px(50),
                     height: percent(100),
@@ -109,11 +100,11 @@ pub fn scene() -> impl Scene {
                     row_gap: px(6),
                     padding: px(6),
                 }
-                ThemeBackgroundColor(tokens::PANE_BODY_BG)
+                ThemeBackgroundColor(tokens::PANEL_BG)
                 Children [
                     #PlusButton
                     @FeathersButton {
-                        @caption: bsn! { Text("+") TextFont { font_size: px(30) } },
+                        @caption: bsn! { icon(lucide_icons::Icon::Plus, px(24)) },
                         @variant: ButtonVariant::Normal,
                     }
                     Node {
@@ -135,7 +126,7 @@ fn collapsed_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene
         #CollapsedFieldEntry
         SidebarEntryRepresents(field_entity)
         @FeathersButton {
-            @caption: bsn! { Text({field_id.to_string()}) TextFont { font_size: px(20) } },
+            @caption: bsn! { regular_text(field_id.to_string()) TextFont { font_size: px(20) } },
             @variant: ButtonVariant::Normal,
         }
         Node {
@@ -147,10 +138,14 @@ fn collapsed_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene
     }
 }
 
-fn expanded_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene {
-    // TODO: Hover feedback
-    fn inspector_button(inspector: InspectorType, field_entity: Entity) -> impl Scene {
+fn expanded_field_entry_scene(
+    field_entity: Entity,
+    field_id: u8,
+    initial_selection: InspectorType,
+) -> impl Scene {
+    fn inspector_button(inspector_type: InspectorType) -> impl Scene {
         bsn! {
+            template_value(inspector_type)
             bevy::ui_widgets::Button
             Node {
                 width: percent(100),
@@ -159,15 +154,39 @@ fn expanded_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene 
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
             }
-            on(inspector_click_observer(inspector, field_entity))
+            on(on_inspector_button_click)
+            // Hover feedback for unselected buttons
+            on(|event: On<Pointer<Enter>>, mut commands: Commands, q_children: Query<&Children>| {
+                if let Ok(text_entity) = q_children.get(event.entity).map(|c| c[0]) {
+                    commands.entity(text_entity).insert(ThemeTextColor(tokens::TEXT_0));
+                }
+            })
+            on(|event: On<Pointer<Leave>>, mut commands: Commands, (q_parent, q_children): (Query<&ChildOf>, Query<&Children>), q_sidebar: Query<&InspectorType, With<Sidebar>>, q_inspector_button: Query<&InspectorType, Without<Sidebar>>| {
+                let button_type = q_inspector_button.get(event.entity).unwrap();
+                let selected_type = q_parent.iter_ancestors(event.entity).find_map(|e| q_sidebar.get(e).ok()).unwrap();
+                if button_type != selected_type && let Ok(text_entity) = q_children.get(event.entity).map(|c| c[0]) {
+                    commands.entity(text_entity).insert(ThemeTextColor(tokens::TEXT_1));
+                }
+            })
             Children [
-                crate::icons::icon(inspector.icon(), px(22)) ThemeTextColor(tokens::TEXT_MAIN),
+                icon(inspector_type.icon(), px(22)) ThemeTextColor(tokens::TEXT_1),
             ]
         }
     }
 
+    let inspector_buttons = InspectorType::all()
+        .map(|inspector| {
+            if inspector == initial_selection {
+                Box::new(bsn! { inspector_button(inspector) ImmediateActivate }) as Box<dyn Scene>
+            } else {
+                Box::new(inspector_button(inspector))
+            }
+        })
+        .collect::<Vec<_>>();
+
     bsn! {
         #ExpandedFieldEntry
+        ExpandedFieldEntry
         SidebarEntryRepresents(field_entity)
         Node {
             flex_direction: FlexDirection::Column,
@@ -177,7 +196,8 @@ fn expanded_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene 
             border_radius: px(4),
             border: px(1),
         }
-        ThemeBorderColor(tokens::BUTTON_PRIMARY_BG)
+        ThemeBorderColor(tokens::SIDEBAR_EXPANDED_FIELD_BORDER)
+        ThemeBackgroundColor(tokens::SIDEBAR_EXPANDED_FIELD_BG)
         Children [
             bevy::ui_widgets::Button
             EntityCursor::System(bevy::window::SystemCursorIcon::Pointer)
@@ -189,17 +209,16 @@ fn expanded_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene 
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
             }
-            ThemeBackgroundColor(tokens::BUTTON_PRIMARY_BG)
+            ThemeBackgroundColor(tokens::SIDEBAR_EXPANDED_FIELD_BUTTON)
             on(on_expanded_click)
-            Children [ Text({field_id.to_string()}) TextFont { font_size: px(20) } TextOfComponent(#ExpandedFieldEntry) ],
+            Children [ regular_text(field_id.to_string()) TextFont { font_size: px(20) } TextOfComponent(#ExpandedFieldEntry) ],
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: px(3),
                 width: percent(100),
             }
             Children [
-                #RobotInspectorButton inspector_button(InspectorType::Robots, field_entity),
-                #VisInspectorButton inspector_button(InspectorType::Vis, field_entity) ImmediateActivate,
+                {inspector_buttons}
             ]
         ]
     }
@@ -229,19 +248,25 @@ fn on_collapsed_click(
     q_parent: Query<&ChildOf>,
     q_field_entries: Query<&SidebarEntryRepresents>,
     q_field: Query<&FieldId>,
+    q_last_selected_inspector: Query<&InspectorType>,
 ) {
     if let Ok(ChildOf(sidebar_entity)) = q_parent.get(click.entity)
         && let Ok(SidebarEntryRepresents(field_entity)) = q_field_entries.get(click.entity)
     {
         let field_id = q_field.get(*field_entity).unwrap().0;
 
+        commands.queue(collapse_expanded_entry(*sidebar_entity));
         // Despawn the old button
         commands.entity(click.entity).despawn();
 
         // Spawn the expanded entry
-        // TODO: Keep the inspector selection of the last expanded entry
+        let last_selected_inspector = q_last_selected_inspector.get(*sidebar_entity).unwrap();
         let new_entity = commands
-            .spawn_scene(expanded_field_entry_scene(*field_entity, field_id))
+            .spawn_scene(expanded_field_entry_scene(
+                *field_entity,
+                field_id,
+                *last_selected_inspector,
+            ))
             .id();
         commands.entity(*sidebar_entity).insert_child(0, new_entity);
     }
@@ -252,50 +277,51 @@ fn on_expanded_click(click: On<Activate>, mut commands: Commands, q_parent: Quer
         && let Ok(sidebar_entity) = q_parent.get(expanded_entry_entity.0)
         && let Ok(container_entity) = q_parent.get(sidebar_entity.0)
     {
-        commands.queue(collapse_expanded_entry(expanded_entry_entity.0));
+        commands.queue(collapse_expanded_entry(sidebar_entity.0));
         commands.queue(replace_panel_command(container_entity.0, None::<()>));
     }
 }
 
-fn inspector_click_observer(
-    inspector: InspectorType,
-    field_entity: Entity,
-) -> impl ObserverSystem<Activate, ()> + Clone {
-    let on_inspector_click =
-        move |click: On<Activate>,
-              mut commands: Commands,
-              (q_parent, q_children): (Query<&ChildOf>, Query<&Children>)| {
-            let button_entity = click.entity;
-            if let Ok(inspector_list_entity) = q_parent.get(button_entity)
-                && let Ok(expanded_entry_entity) = q_parent.get(inspector_list_entity.0)
-                && let Ok(sidebar_entity) = q_parent.get(expanded_entry_entity.0)
-                && let Ok(container_entity) = q_parent.get(sidebar_entity.0)
-            {
-                let inspector_scene = bsn! {
-                    {inspector.scene(field_entity)}
-                    on(move |_: On<Despawn, Node>, mut commands: Commands, q_children: Query<&Children>| {
-                        if let Ok(button_children) = q_children.get(button_entity) {
-                            commands.entity(button_children[0]).try_insert(ThemeTextColor(tokens::TEXT_MAIN));
-                        }
-                    })
-                };
-                commands.queue(replace_panel_command(
-                    container_entity.0,
-                    Some(inspector_scene),
-                ));
-                let text_entity = q_children.get(button_entity).unwrap()[0];
-                commands
-                    .entity(text_entity)
-                    .try_insert(ThemeTextColor(tokens::BUTTON_TEXT));
-            }
+fn on_inspector_button_click(
+    click: On<Activate>,
+    mut commands: Commands,
+    (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
+    q_inspector_type: Query<&InspectorType>,
+    q_entry_field: Query<&SidebarEntryRepresents>,
+) {
+    let button_entity = click.entity;
+    if let Ok(inspector_list_entity) = q_parent.get(button_entity)
+        && let Ok(expanded_entry_entity) = q_parent.get(inspector_list_entity.0)
+        && let Ok(sidebar_entity) = q_parent.get(expanded_entry_entity.0)
+        && let Ok(container_entity) = q_parent.get(sidebar_entity.0)
+    {
+        let field_entity = q_entry_field.get(expanded_entry_entity.0).unwrap().0;
+        let inspector_type = q_inspector_type.get(button_entity).unwrap();
+        let inspector_scene = bsn! {
+            {inspector_type.scene(field_entity)}
+            on(move |_: On<Despawn, Node>, mut commands: Commands, q_children: Query<&Children>| {
+                if let Ok(button_children) = q_children.get(button_entity) {
+                    commands.entity(button_children[0]).try_insert(ThemeTextColor(tokens::TEXT_1));
+                }
+            })
         };
-    IntoObserverSystem::into_system(on_inspector_click)
+        commands.queue(replace_panel_command(
+            container_entity.0,
+            Some(inspector_scene),
+        ));
+        let text_entity = q_children.get(button_entity).unwrap()[0];
+        commands
+            .entity(text_entity)
+            .try_insert(ThemeTextColor(tokens::TEXT_0));
+        // Set the last selected
+        commands.entity(sidebar_entity.0).insert(*inspector_type);
+    }
 }
 
 fn on_plus_click(
     click: On<Activate>,
     mut commands: Commands,
-    (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
+    q_parent: Query<&ChildOf>,
     mut q_button_variant: Query<&mut ButtonVariant>,
 ) {
     let button_entity = click.entity;
@@ -304,9 +330,7 @@ fn on_plus_click(
         && let Ok(mut button_variant) = q_button_variant.get_mut(button_entity)
     {
         if *button_variant == ButtonVariant::Normal {
-            // TODO: This should happen automatically
-            let maybe_expanded_entry = q_children.get(*sidebar_entity).unwrap()[0];
-            commands.queue(collapse_expanded_entry(maybe_expanded_entry));
+            commands.queue(collapse_expanded_entry(*sidebar_entity));
             commands.queue(replace_panel_command(
                 *container_entity,
                 Some(bsn! {
@@ -326,16 +350,18 @@ fn on_plus_click(
     }
 }
 
-fn collapse_expanded_entry(expanded_entity: Entity) -> impl Command {
+fn collapse_expanded_entry(sidebar_entity: Entity) -> impl Command {
     move |world: &mut World| {
-        if let Some(ChildOf(sidebar_entity)) = world.get(expanded_entity)
-            && let Some(SidebarEntryRepresents(field_entity)) = world.get(expanded_entity)
+        if let Some(sidebar_children) = world.get::<Children>(sidebar_entity)
+            && let Some(expanded_entity) = sidebar_children.first()
+            && world.get::<ExpandedFieldEntry>(*expanded_entity).is_some()
+            && let Some(SidebarEntryRepresents(field_entity)) = world.get(*expanded_entity)
             && let Some(FieldId(field_id)) = world.get(*field_entity)
         {
-            let sidebar_entity = *sidebar_entity;
+            let sidebar_entity = sidebar_entity;
             let field_entity = *field_entity;
             let field_id = *field_id;
-            world.entity_mut(expanded_entity).despawn();
+            world.entity_mut(*expanded_entity).despawn();
             let collapsed_entity = world
                 .spawn_scene(collapsed_field_entry_scene(field_entity, field_id))
                 .unwrap()

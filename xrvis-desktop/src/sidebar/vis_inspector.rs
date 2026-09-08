@@ -1,11 +1,12 @@
-use crate::sidebar::{ComponentText, TextOfComponent};
+use crate::sidebar::{TextOfComponent, regular_text};
+use crate::ui::{ComponentText, tokens};
 use bevy::app::PropagateOver;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
+use bevy::feathers;
 use bevy::feathers::controls::{
     ButtonVariant, FeathersButton, FeathersCheckbox, FeathersDisclosureToggle, FeathersListView,
 };
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemedText};
-use bevy::feathers::tokens::{CHECKBOX_TEXT_DISABLED, PANE_BODY_BG, PANE_HEADER_BORDER};
 use bevy::prelude::*;
 use bevy::scene::SceneFunction;
 use bevy::ui::Checked;
@@ -75,8 +76,8 @@ impl Template for VisInspectorTemplate {
                     border: {UiRect::right(px(1))},
                 }
                 VisUiRepresentsEntity(field_entity)
-                ThemeBackgroundColor(PANE_BODY_BG)
-                ThemeBorderColor(PANE_HEADER_BORDER)
+                ThemeBackgroundColor(tokens::PANEL_BG)
+                ThemeBorderColor(tokens::PANEL_BORDER)
                 Children [
                     (
                         Node {
@@ -398,7 +399,7 @@ fn source_ui_scene(
             }
             Children [
                 @FeathersDisclosureToggle Checked on(on_disclosure_click),
-                Text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root),
+                regular_text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root),
             ],
             @FeathersListView {
                 @rows: {Box::new(vis_list) as Box<dyn SceneList>},
@@ -516,7 +517,7 @@ fn on_source_name_insert(
     for ui_entity in ui_ref {
         let (label_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
-            .entity(label_ref.0)
+            .entity(*label_ref.collection())
             .insert(Text(new_name.0.clone()));
 
         commands.entity(*ui_entity).remove::<ChildOf>();
@@ -541,7 +542,7 @@ fn on_vis_name_insert(
     for ui_entity in ui_ref {
         let (caption_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
-            .entity(caption_ref.0)
+            .entity(*caption_ref.collection())
             .insert(Text(new_name.0.clone()));
 
         commands.entity(*ui_entity).remove::<ChildOf>();
@@ -563,9 +564,9 @@ fn on_vis_inactive(
         let label_ref = q_text_ref.get(*ui_entity).unwrap();
         // PropagateOver temporarily disables text color inheritance
         commands
-            .entity(label_ref.0)
+            .entity(*label_ref.collection())
             .insert(PropagateOver::<TextColor>::default())
-            .insert(ThemeTextColor(CHECKBOX_TEXT_DISABLED));
+            .insert(ThemeTextColor(feathers::tokens::CHECKBOX_TEXT_DISABLED));
     }
 }
 
@@ -579,7 +580,7 @@ fn on_vis_active(
         let label_ref = q_text_ref.get(*ui_entity).unwrap();
         // Removing PropagateOver re-triggers propagation
         commands
-            .entity(label_ref.0)
+            .entity(*label_ref.collection())
             .try_remove::<ThemeTextColor>()
             .try_remove::<PropagateOver<TextColor>>();
     }
@@ -590,9 +591,11 @@ fn insert_child_sorted(child: Entity) -> impl EntityCommand {
     move |mut parent: EntityWorldMut| -> Result<(), BevyError> {
         let world = parent.world();
 
-        let new_text = world
-            .get::<ComponentText>(child)
-            .and_then(|t_ref| world.get::<Text>(t_ref.0).map(|t| t.0.to_lowercase()));
+        let new_text = world.get::<ComponentText>(child).and_then(|t_ref| {
+            world
+                .get::<Text>(*t_ref.collection())
+                .map(|t| t.0.to_lowercase())
+        });
 
         let index = parent
             .get::<Children>()
@@ -600,9 +603,11 @@ fn insert_child_sorted(child: Entity) -> impl EntityCommand {
             .flatten()
             .enumerate()
             .find_map(|(i, e)| {
-                let this_text = world
-                    .get::<ComponentText>(*e)
-                    .and_then(|t_ref| world.get::<Text>(t_ref.0).map(|t| t.0.to_lowercase()));
+                let this_text = world.get::<ComponentText>(*e).and_then(|t_ref| {
+                    world
+                        .get::<Text>(*t_ref.collection())
+                        .map(|t| t.0.to_lowercase())
+                });
                 (new_text < this_text).then_some(i)
             });
 
