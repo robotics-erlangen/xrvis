@@ -85,8 +85,9 @@ fn manage_game_state_panels(
                     team_panel(field_entity, Team::Blue, false),
                 );
 
-                let panel_anchor = commands
+                commands
                     .spawn((
+                        ChildOf(field_entity),
                         Transform::from_translation(
                             field_transform.translation
                                 + field_transform.forward()
@@ -97,9 +98,7 @@ fn manage_game_state_panels(
                         .looking_at(Vec3::ZERO, Vec3::Y),
                         FieldSidePanelAnchor,
                     ))
-                    .add_children(&[score_panel, left_panel, right_panel])
-                    .id();
-                commands.entity(field_entity).add_child(panel_anchor);
+                    .add_children(&[score_panel, left_panel, right_panel]);
             }
             _ => {}
         }

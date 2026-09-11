@@ -112,15 +112,17 @@ pub(crate) fn update_world_state(
         for new_ball in &world_state.ball {
             let new_ball_pos = Vec3::new(new_ball.p_x, new_ball.p_z.unwrap_or(0.0), new_ball.p_y);
 
-            let mut new_ball = commands.spawn((Ball, Transform::from_translation(new_ball_pos)));
+            let mut new_ball = commands.spawn((
+                ChildOf(field),
+                Ball,
+                Transform::from_translation(new_ball_pos),
+            ));
             if render_settings.ball {
                 new_ball.insert((
                     Mesh3d(ball_mesh.0.clone()),
                     MeshMaterial3d(ball_mesh.1.clone()),
                 ));
             }
-            let new_ball = new_ball.id();
-            commands.entity(field).add_child(new_ball);
         }
     }
 
@@ -150,6 +152,7 @@ pub(crate) fn update_world_state(
             } else {
                 // Add new robot
                 let mut new_robot = commands.spawn((
+                    ChildOf(field),
                     Robot(robot_update.id as u8),
                     team,
                     TransformFilter::new_history(Duration::from_millis(500), true),
@@ -174,8 +177,6 @@ pub(crate) fn update_world_state(
                     }
                     RobotRenderSettings::None => {}
                 }
-                let new_robot_id = new_robot.id();
-                commands.entity(field).add_child(new_robot_id);
             }
         }
 
