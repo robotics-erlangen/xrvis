@@ -24,8 +24,8 @@ pub fn sidebar_plugin(app: &mut App) {
 /// On a [Sidebar], it stores the last selected inspector. On an inspector button, it marks the inspector this button spawns.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 enum InspectorType {
-    Robots,
     #[default]
+    Robots,
     Vis,
 }
 

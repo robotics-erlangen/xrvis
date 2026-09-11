@@ -15,3 +15,7 @@ pub const SIDEBAR_EXPANDED_FIELD_BUTTON: ThemeToken =
 
 pub const GREEN: ThemeToken = ThemeToken::new_static("xrvis.green");
 pub const RED: ThemeToken = ThemeToken::new_static("xrvis.red");
+pub const YELLOW: ThemeToken = ThemeToken::new_static("xrvis.yellow");
+pub const YELLOW_1: ThemeToken = ThemeToken::new_static("xrvis.yellow.1");
+pub const BLUE: ThemeToken = ThemeToken::new_static("xrvis.blue");
+pub const BLUE_1: ThemeToken = ThemeToken::new_static("xrvis.blue.1");

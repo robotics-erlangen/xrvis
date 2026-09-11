@@ -35,6 +35,16 @@ pub fn extended_dark_theme() -> ThemeProps {
         .color
         .insert(GREEN, tailwind::GREEN_500.into());
     feathers_dark.color.insert(RED, tailwind::RED_500.into());
+    feathers_dark
+        .color
+        .insert(YELLOW, tailwind::YELLOW_500.into());
+    feathers_dark
+        .color
+        .insert(YELLOW_1, tailwind::YELLOW_500.darker(0.1).into());
+    feathers_dark.color.insert(BLUE, tailwind::BLUE_600.into());
+    feathers_dark
+        .color
+        .insert(BLUE_1, tailwind::BLUE_600.darker(0.1).into());
 
     feathers_dark
 }

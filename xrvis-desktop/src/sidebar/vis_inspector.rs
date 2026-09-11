@@ -1,5 +1,5 @@
 use crate::sidebar::{TextOfComponent, regular_text};
-use crate::ui::{ComponentText, tokens};
+use crate::ui::{ComponentText, insert_child_sorted, tokens};
 use bevy::app::PropagateOver;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers;
@@ -35,11 +35,11 @@ pub fn scene(field_entity: Entity) -> impl Scene {
 
 /// References the field that this inspector interacts with. Should always be used in [bsn!], so the [VisInspectorTemplate] can initialize the UI.
 #[derive(Component, Clone, Copy)]
-#[relationship(relationship_target = FieldInspectedBy)]
+#[relationship(relationship_target = FieldVisInspectedBy)]
 struct VisInspector(Entity);
 #[derive(Component, Clone, Copy)]
 #[relationship_target(relationship = VisInspector, linked_spawn)]
-struct FieldInspectedBy(Entity);
+struct FieldVisInspectedBy(Entity);
 
 /// Custom template for [VisInspector] that creates the initial UI using the current state of the referenced field.
 #[derive(Default)]
@@ -583,40 +583,5 @@ fn on_vis_active(
             .entity(*label_ref.collection())
             .try_remove::<ThemeTextColor>()
             .try_remove::<PropagateOver<TextColor>>();
-    }
-}
-
-/// Inserts a child entity sorted by its [ComponentText].
-fn insert_child_sorted(child: Entity) -> impl EntityCommand {
-    move |mut parent: EntityWorldMut| -> Result<(), BevyError> {
-        let world = parent.world();
-
-        let new_text = world.get::<ComponentText>(child).and_then(|t_ref| {
-            world
-                .get::<Text>(*t_ref.collection())
-                .map(|t| t.0.to_lowercase())
-        });
-
-        let index = parent
-            .get::<Children>()
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .find_map(|(i, e)| {
-                let this_text = world.get::<ComponentText>(*e).and_then(|t_ref| {
-                    world
-                        .get::<Text>(*t_ref.collection())
-                        .map(|t| t.0.to_lowercase())
-                });
-                (new_text < this_text).then_some(i)
-            });
-
-        if let Some(i) = index {
-            parent.insert_child(i, child);
-        } else {
-            parent.add_child(child);
-        }
-
-        Ok(())
     }
 }

@@ -18,6 +18,41 @@ pub struct ComponentText(Entity);
 #[relationship(relationship_target = ComponentText)]
 pub struct TextOfComponent(pub Entity);
 
+/// Inserts a child entity sorted by its [ComponentText].
+pub fn insert_child_sorted(child: Entity) -> impl EntityCommand {
+    move |mut parent: EntityWorldMut| -> Result<(), BevyError> {
+        let world = parent.world();
+
+        let new_text = world.get::<ComponentText>(child).and_then(|t_ref| {
+            world
+                .get::<Text>(*t_ref.collection())
+                .map(|t| t.0.to_lowercase())
+        });
+
+        let index = parent
+            .get::<Children>()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .find_map(|(i, e)| {
+                let this_text = world.get::<ComponentText>(*e).and_then(|t_ref| {
+                    world
+                        .get::<Text>(*t_ref.collection())
+                        .map(|t| t.0.to_lowercase())
+                });
+                (new_text < this_text).then_some(i)
+            });
+
+        if let Some(i) = index {
+            parent.insert_child(i, child);
+        } else {
+            parent.add_child(child);
+        }
+
+        Ok(())
+    }
+}
+
 /// Triggers [Activate] when added, useful for simulate an immediate click when spawning a button.
 #[derive(Component, Clone, Copy, Default)]
 pub struct ImmediateActivate;
