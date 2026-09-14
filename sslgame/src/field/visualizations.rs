@@ -3,16 +3,13 @@ use crate::mesh_gen::vis::visualization_mesh;
 use crate::proto::remote::vis_shape::Geom;
 use crate::proto::remote::{VisMappings, Visualization, VisualizationUpdate};
 use crate::{DefaultMaterial, RenderSettings, proto};
-use bevy::asset::{AssetServer, Assets};
-use bevy::math::{Quat, Vec3};
+use bevy::asset::Assets;
 use bevy::mesh::{Mesh, Mesh3d};
 use bevy::pbr::MeshMaterial3d;
 use bevy::prelude::*;
 use derive_more::IntoIterator;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::f32::consts::PI;
-use tracing::warn;
 
 pub fn vis_plugin(app: &mut App) {
     app.add_systems(PreUpdate, update_visualization_instances);
@@ -56,7 +53,7 @@ pub struct VisualizationFromHost(pub Entity);
 #[relationship_target(relationship = VisualizationFromHost, linked_spawn)]
 pub struct AllHostVisualizations(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
-/// Field-side counterpart to [VisualizationUsages]. Any entity with this component will automatically get its target's asset children and mesh.
+/// Field-side counterpart to [VisualizationUsages]. Any entity with this component will automatically get its target's mesh.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 #[relationship(relationship_target = VisualizationUsages)]
 #[require(Transform)]
@@ -147,10 +144,7 @@ pub(crate) fn update_visualization_names(
 pub(crate) fn update_visualizations(
     In((host_entity, mut vis_update)): In<(Entity, VisualizationUpdate)>,
     mut commands: Commands,
-    q_hosts: Query<
-        (&Host, Option<&VisualizationNameMappings>, Option<&Children>),
-        With<HostConnection>,
-    >,
+    q_hosts: Query<(Option<&VisualizationNameMappings>, Option<&Children>), With<HostConnection>>,
     q_vis_sources: Query<(&VisualizationSourceId, Entity, Option<&Children>)>,
     mut q_visualizations: Query<(
         &VisualizationId,
@@ -159,8 +153,8 @@ pub(crate) fn update_visualizations(
         Entity,
     )>,
 ) {
-    let (host, cached_names, source_entities) = match q_hosts.get(host_entity) {
-        Ok((h, m, c)) => (h, m, c.into_iter().flatten()),
+    let (cached_names, source_entities) = match q_hosts.get(host_entity) {
+        Ok((m, c)) => (m, c.into_iter().flatten()),
         Err(e) => {
             error!("Failed to fetch host entity {host_entity:?} for update_visualizations: {e}");
             return;
@@ -192,14 +186,6 @@ pub(crate) fn update_visualizations(
                 None => {}
             }
         }
-        for asset in &mut vis.asset {
-            if let Some(pos) = &mut asset.pos {
-                pos.y = -pos.y;
-            }
-            if let Some(phi) = &mut asset.angle {
-                *phi -= PI / 2.0;
-            }
-        }
     }
 
     let group_selector = vis_update
@@ -225,13 +211,6 @@ pub(crate) fn update_visualizations(
                 Entry::Occupied(mut entry) => {
                     let acc = entry.get_mut();
                     acc.shape.extend(vis.shape);
-                    acc.asset.extend(vis.asset);
-                    if acc.shape_theme != vis.shape_theme {
-                        warn!(
-                            "Got multiple different shape themes for vis {}, source {}, host {}. Using the first one:\n  first: {:?}\n  second: {:?}",
-                            vis.id, source_id.0, host, acc.shape_theme, vis.shape_theme
-                        );
-                    }
                 }
                 Entry::Vacant(entry) => {
                     entry.insert(vis);
@@ -298,8 +277,8 @@ pub(crate) fn update_visualizations(
                     ChildOf(source_entity),
                 ))
             };
-            // Not having shapes or assets means that the visualization was probably excluded by a VisualizationFilter
-            if !(new_vis.shape.is_empty() && new_vis.asset.is_empty()) {
+            // Not having shapes means that the visualization was probably excluded by a VisualizationFilter
+            if !new_vis.shape.is_empty() {
                 e.insert(VisualizationData(new_vis));
             }
         }
@@ -326,10 +305,9 @@ pub(crate) fn update_visualizations(
     }
 }
 
-/// Updates the asset children and mesh of all [VisualizationInstance]s based on changes to their referenced [VisualizationData]
+/// Updates the mesh of all [VisualizationInstance]s based on changes to their referenced [VisualizationData]
 fn update_visualization_instances(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     render_settings: Res<RenderSettings>,
     material: Res<DefaultMaterial>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
@@ -348,39 +326,12 @@ fn update_visualization_instances(
             let visualization = &vis_data.0;
 
             if !visualization.shape.is_empty() {
-                let vis_mesh = mesh_assets.add(visualization_mesh(visualization));
+                let vis_mesh = mesh_assets.add(visualization_mesh(&[visualization]));
 
                 commands.entity(vis_instance_entity).insert((
                     Mesh3d(vis_mesh),
                     MeshMaterial3d(material.opaque.clone()), // TODO: Switch back to translucent. Frustum culling for translucents with NoIndirectDrawing broke in bevy 0.19
                 ));
-            }
-
-            for asset_vis in &visualization.asset {
-                if let Some(anim) = &asset_vis.animation {
-                    // TODO: Implement asset vis animations
-                    warn!(
-                        "Asset vis animations aren't implemented yet, tried playing {}:{anim}",
-                        asset_vis.path
-                    );
-                }
-                commands
-                    .entity(vis_instance_entity)
-                    .despawn_children()
-                    .insert((
-                        Transform {
-                            translation: asset_vis
-                                .pos
-                                .map(|p| Vec3::new(p.x, 0., p.y))
-                                .unwrap_or(Vec3::ZERO),
-                            rotation: Quat::from_rotation_y(asset_vis.angle.unwrap_or(0.0)),
-                            scale: Vec3::ONE,
-                        },
-                        WorldAssetRoot(
-                            // FIXME: Very easy path injection vulnerability (I guess there are already some others but this one seems especially obvious)
-                            asset_server.load(format!("vis_assets/{}.glb#Scene0", asset_vis.path)),
-                        ),
-                    ));
             }
         }
     }

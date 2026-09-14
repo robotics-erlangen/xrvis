@@ -84,10 +84,6 @@ message Visualization {
     required uint32 id = 1;
     // Standard visualisation shapes
     repeated VisShape shape = 2;
-    // Optional implementation-defined theme for more drastic styling changes (e.g. simple, hologram, ...)
-    optional string shape_theme = 3;
-    // Implementation-defined custom assets
-    repeated VisAsset asset = 4;
 }
 
 // ==== Visualization shapes ====
@@ -138,15 +134,4 @@ message Polygon {
 
 message Path {
     repeated Point point = 1;
-}
-
-// ==== Asset visualizations ====
-
-message VisAsset {
-    // Included directly without a VisMapping-like indirection because the string content is essential to using the data.
-    required string path = 1;
-    optional Point pos = 2;
-    optional float angle = 3;
-    // Currently looping animation
-    optional string animation = 4;
 }
