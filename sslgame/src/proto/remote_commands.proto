@@ -3,7 +3,8 @@ syntax = "proto2";
 package remote;
 
 // Whitelist for visualizations, used to apply per-client filtering before sending.
-// The filter shouldn't fully hide visualizations. At least their id still has to be be included let the client see the whole hierarchy.
+// The filter shouldn't fully hide visualizations. At least their id still has
+// to be included to let the client see the whole hierarchy.
 message VisualizationFilter {
     // An entry in the VisualizationFilter whitelist.
     // (0, 1): Vis 1 in source 0
@@ -18,11 +19,32 @@ message VisualizationFilter {
     repeated VisualizationFilterEntry allowed_visualizations = 1;
 }
 
-// Manually moves a robot to the specified location until a different command is issued.
-// This means you have to send an empty command after finishing to hand control back over to the ai.
-message RobotMoveCommand {
+// Sets a manual robot command, which stays active until another command is sent. Send an empty command to hand control back to the ai.
+message RobotCommand {
+    required RobotRef robot = 1;
+    // If the robot doesn't have the ball: Use the host ai to catch the ball. Depending on the implementation it might take away control completely or still allow for some adjustments.
+    // If the robot has the ball: Dribbles the ball.
+    optional bool hold_ball = 2;
+    oneof move_target {
+        RobotMoveTarget world_pos = 3;
+        RobotMoveTarget world_vel = 4;
+        RobotMoveTarget local_vel = 5;
+    }
+    oneof kick_command {
+        float linear_kick_speed = 6;
+        float linear_kick_distance = 7;
+        float chip_kick_distance = 8;
+    }
+}
+
+message RobotRef {
     required uint32 robot_id = 1;
-    required bool is_blue = 2;
-    optional float p_x = 3;
-    optional float p_y = 4;
+    optional bool is_blue = 2;
+}
+
+// Target for a robot move command. Can either be a position or velocity. Position default is the current position, velocity default is 0.
+message RobotMoveTarget {
+    optional float x = 1;
+    optional float y = 2;
+    optional float phi = 3;
 }

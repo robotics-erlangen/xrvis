@@ -14,7 +14,7 @@ use sslgame::field::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowR
 use sslgame::field::robots::Robot;
 use sslgame::field::{Field, Team};
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
-use sslgame::proto::remote::{RobotMoveCommand, ws_request};
+use sslgame::proto::remote::{RobotCommand, RobotMoveTarget, RobotRef, robot_command, ws_request};
 use std::ops::Range;
 use std::time::Instant;
 
@@ -387,11 +387,14 @@ pub fn drive_field_dragging(
                     if let Some(host_conn) = host_conn {
                         host_conn
                             .sender
-                            .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
-                                robot_id: *robot_id as u32,
-                                is_blue: *robot_team == Team::Blue,
-                                p_x: None,
-                                p_y: None,
+                            .send_blocking(ws_request::Content::ControlRobot(RobotCommand {
+                                robot: RobotRef {
+                                    robot_id: *robot_id as u32,
+                                    is_blue: Some(*robot_team == Team::Blue),
+                                },
+                                hold_ball: None,
+                                move_target: None,
+                                kick_command: None,
                             }))
                             .unwrap();
                     }
@@ -446,11 +449,18 @@ pub fn drive_field_dragging(
             if let Some(host_conn) = host_conn {
                 host_conn
                     .sender
-                    .send_blocking(ws_request::Content::MoveRobot(RobotMoveCommand {
-                        robot_id: dragging_robot_id as u32,
-                        is_blue: dragging_robot_team == Team::Blue,
-                        p_x: Some(pointer_hit.pos.x),
-                        p_y: Some(pointer_hit.pos.y),
+                    .send_blocking(ws_request::Content::ControlRobot(RobotCommand {
+                        robot: RobotRef {
+                            robot_id: dragging_robot_id as u32,
+                            is_blue: Some(dragging_robot_team == Team::Blue),
+                        },
+                        hold_ball: None,
+                        move_target: Some(robot_command::MoveTarget::WorldPos(RobotMoveTarget {
+                            x: Some(pointer_hit.pos.x),
+                            y: Some(pointer_hit.pos.y),
+                            phi: None,
+                        })),
+                        kick_command: None,
                     }))
                     .unwrap();
             }

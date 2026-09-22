@@ -167,7 +167,7 @@ fn host_entry_scene(
                 (
                     @FeathersButton {
                         @caption: bsn! {
-                            icon((if spawned_as.is_some() {Icon::CornerUpLeft} else {Icon::CornerRightDown}), px(12))
+                            icon(if spawned_as.is_some() {Icon::CornerUpLeft} else {Icon::CornerRightDown}, px(12))
                         },
                     }
                     Node {

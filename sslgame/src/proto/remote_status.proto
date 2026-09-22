@@ -34,7 +34,7 @@ message VisMappings {
 // ==== World State ====
 
 message WorldState {
-    // Timestamp used for client-side state filtering and buffer time adjustments
+    // Monotonic microsecond timestamp used for client-side state filtering and buffer time adjustments
     optional uint64 timestamp = 1;
     repeated Ball ball = 2;
     repeated Robot yellow_robot = 3;
