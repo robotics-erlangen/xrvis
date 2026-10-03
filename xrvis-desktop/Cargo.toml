@@ -8,7 +8,7 @@ rust-version.workspace = true
 3d-panels = []
 
 [dependencies]
-bevy = { workspace = true, features = ["bevy_feathers"] }
+bevy = { workspace = true, features = ["bevy_feathers", "bevy_dev_tools"] }
 derive_more = { workspace = true, features = ["into_iterator"] }
 lucide-icons.workspace = true
 

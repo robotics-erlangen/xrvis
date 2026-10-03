@@ -3,6 +3,7 @@ mod sidebar;
 mod ui;
 mod viewport;
 
+use bevy::dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin};
 use bevy::feathers::FeathersPlugins;
 use bevy::feathers::theme::UiTheme;
 use bevy::prelude::*;
@@ -11,7 +12,7 @@ use sslgame::ssl_game_plugin;
 fn main() {
     let mut app = App::new();
 
-    app.add_plugins((DefaultPlugins, FeathersPlugins));
+    app.add_plugins((DefaultPlugins, FeathersPlugins, InfiniteGridPlugin));
     app.add_plugins(ssl_game_plugin);
 
     app.insert_resource(UiTheme(ui::theme::extended_dark_theme()));
@@ -51,6 +52,8 @@ fn startup(mut commands: Commands) {
             ..DirectionalLight::default()
         },
     ));
+
+    commands.spawn(InfiniteGrid);
 
     // Spawn UI
     commands.spawn(Camera2d);
