@@ -1,9 +1,9 @@
 use crate::icons::icon;
-use crate::sidebar::FieldId;
+use crate::sidebar::{FieldId, inspector_base_scene};
 use crate::ui::tokens;
 use bevy::ecs::template::TemplateContext;
 use bevy::feathers::controls::{ButtonVariant, FeathersButton};
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
+use bevy::feathers::theme::{ThemeBackgroundColor, ThemedText};
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use derive_more::IntoIterator;
@@ -83,17 +83,12 @@ impl Template for HostManagerTemplate {
         };
 
         let scene = bsn! {
+            inspector_base_scene()
             Node {
-                width: px(300),
-                height: percent(100),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
                 padding: px(6),
-                border: {UiRect::right(px(1))},
-                overflow: Overflow::scroll_y(),
             }
-            ThemeBackgroundColor(tokens::PANEL_BG)
-            ThemeBorderColor(tokens::PANEL_BORDER)
             Children [
                 {children}
             ]

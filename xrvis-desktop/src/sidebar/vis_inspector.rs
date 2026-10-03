@@ -1,12 +1,12 @@
-use crate::sidebar::{TextOfComponent, regular_text};
-use crate::ui::{ComponentText, insert_child_sorted, tokens};
+use crate::sidebar::{TextOfComponent, inspector_base_scene, regular_text};
+use crate::ui::{ComponentText, insert_child_sorted};
 use bevy::app::PropagateOver;
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers;
 use bevy::feathers::controls::{
     ButtonVariant, FeathersButton, FeathersCheckbox, FeathersDisclosureToggle, FeathersListView,
 };
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemedText};
+use bevy::feathers::theme::{ThemeTextColor, ThemedText};
 use bevy::prelude::*;
 use bevy::scene::SceneFunction;
 use bevy::ui::Checked;
@@ -67,17 +67,13 @@ impl Template for VisInspectorTemplate {
                 .unwrap();
 
             bsn! {
+                inspector_base_scene()
                 Node {
-                    width: px(300),
-                    height: percent(100),
                     flex_direction: FlexDirection::Column,
                     row_gap: px(6),
                     padding: px(6),
-                    border: {UiRect::right(px(1))},
                 }
                 VisUiRepresentsEntity(field_entity)
-                ThemeBackgroundColor(tokens::PANEL_BG)
-                ThemeBorderColor(tokens::PANEL_BORDER)
                 Children [
                     (
                         Node {

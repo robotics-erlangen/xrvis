@@ -57,6 +57,7 @@ impl Template for ViewportTemplate {
             Node {
                 flex_grow: 1.0,
                 height: percent(100),
+                border_radius: px(4).into(),
                 ..default()
             },
             Hovered::default(),

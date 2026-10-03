@@ -1,7 +1,8 @@
+use crate::sidebar::inspector_base_scene;
 use crate::ui::{TextOfComponent, regular_text, tokens};
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers;
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
+use bevy::feathers::theme::ThemeBackgroundColor;
 use bevy::prelude::*;
 use sslgame::field::Team;
 use sslgame::field::robots::Robot;
@@ -128,16 +129,12 @@ impl Template for RobotsInspectorTemplate {
         let (blue_robot_grid, blue_robot_count) = robots_grid(Team::Blue, &robots);
 
         let scene = bsn! {
+            inspector_base_scene()
             Node {
-                width: px(300),
-                height: percent(100),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(10),
                 padding: px(6),
-                border: {UiRect::right(px(1))},
             }
-            ThemeBackgroundColor(tokens::PANEL_BG)
-            ThemeBorderColor(tokens::PANEL_BORDER)
             Children [
                 header(Team::Yellow, yellow_robot_count),
                 yellow_robot_grid,

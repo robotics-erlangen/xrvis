@@ -21,6 +21,17 @@ pub fn sidebar_plugin(app: &mut App) {
 
 // ======== Inspector ========
 
+pub fn inspector_base_scene() -> impl Scene {
+    bsn! {
+        Node {
+            width: px(300),
+            height: percent(100),
+            border_radius: px(4),
+        }
+        ThemeBackgroundColor(tokens::PANEL_BG)
+    }
+}
+
 /// On a [Sidebar], it stores the last selected inspector. On an inspector button, it marks the inspector this button spawns.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 enum InspectorType {
@@ -73,20 +84,11 @@ struct SidebarEntryRepresents(Entity);
 struct RepresentedBySidebarEntry(Vec<Entity>);
 
 pub fn scene() -> impl Scene {
-    fn separator() -> impl Scene {
-        bsn! {
-            Node {
-                width: px(1),
-                height: percent(100),
-            }
-            ThemeBackgroundColor(tokens::PANEL_BORDER)
-        }
-    }
-
     bsn! {
         #SidebarContainer
         Node {
             height: percent(100),
+            column_gap: px(6),
         }
         Children [
             (
@@ -94,13 +96,10 @@ pub fn scene() -> impl Scene {
                 Sidebar
                 InspectorType::default()
                 Node {
-                    width: px(50),
                     height: percent(100),
                     flex_direction: FlexDirection::Column,
                     row_gap: px(6),
-                    padding: px(6),
                 }
-                ThemeBackgroundColor(tokens::PANEL_BG)
                 Children [
                     #PlusButton
                     @FeathersButton {
@@ -115,7 +114,6 @@ pub fn scene() -> impl Scene {
                     on(on_plus_click)
                 ]
             ),
-            (separator()),
             // Open panel will be spawned here
         ]
     }
@@ -376,7 +374,7 @@ fn collapse_expanded_entry(sidebar_entity: Entity) -> impl Command {
 fn replace_panel_command(container_entity: Entity, new_panel: Option<impl Scene>) -> impl Command {
     move |world: &mut World| {
         let container_children = world.get_mut::<Children>(container_entity).unwrap();
-        if let Some(&old_panel_entity) = container_children.get(2) {
+        if let Some(&old_panel_entity) = container_children.get(1) {
             world.entity_mut(old_panel_entity).despawn();
         }
         if let Some(new_panel) = new_panel {

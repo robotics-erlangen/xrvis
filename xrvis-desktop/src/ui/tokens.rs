@@ -1,5 +1,7 @@
 use bevy::feathers::theme::ThemeToken;
 
+pub const WINDOW_BG: ThemeToken = ThemeToken::new_static("xrvis.window");
+
 pub const PANEL_BG: ThemeToken = ThemeToken::new_static("xrvis.pabel.bg");
 pub const PANEL_BORDER: ThemeToken = ThemeToken::new_static("xrvis.pabel.border");
 

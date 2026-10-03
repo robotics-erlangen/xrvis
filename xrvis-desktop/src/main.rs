@@ -3,9 +3,10 @@ mod sidebar;
 mod ui;
 mod viewport;
 
+use crate::ui::tokens;
 use bevy::dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin};
 use bevy::feathers::FeathersPlugins;
-use bevy::feathers::theme::UiTheme;
+use bevy::feathers::theme::{ThemeBackgroundColor, UiTheme};
 use bevy::prelude::*;
 use sslgame::ssl_game_plugin;
 
@@ -61,7 +62,10 @@ fn startup(mut commands: Commands) {
         Node {
             width: percent(100),
             height: percent(100),
+            padding: px(6),
+            column_gap: px(6),
         }
+        ThemeBackgroundColor(tokens::WINDOW_BG)
         Children [
             sidebar::scene(),
             viewport::scene(),

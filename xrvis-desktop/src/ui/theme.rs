@@ -9,6 +9,10 @@ pub fn extended_dark_theme() -> ThemeProps {
 
     feathers_dark
         .color
+        .insert(WINDOW_BG, feathers::palette::GRAY_0.darker(0.1));
+
+    feathers_dark
+        .color
         .insert(PANEL_BG, feathers::palette::GRAY_1);
     feathers_dark
         .color
@@ -37,10 +41,10 @@ pub fn extended_dark_theme() -> ThemeProps {
     feathers_dark.color.insert(RED, tailwind::RED_500.into());
     feathers_dark
         .color
-        .insert(YELLOW, tailwind::YELLOW_500.into());
+        .insert(YELLOW, Srgba::rgb_u8(250, 204, 21).into());
     feathers_dark
         .color
-        .insert(YELLOW_1, tailwind::YELLOW_500.darker(0.1).into());
+        .insert(YELLOW_1, Srgba::rgb_u8(223, 172, 51).into());
     feathers_dark.color.insert(BLUE, tailwind::BLUE_600.into());
     feathers_dark
         .color
