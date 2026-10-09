@@ -11,10 +11,10 @@ resolver = "3"
 net-ext = { path = "net-ext" }
 sslgame = { path = "sslgame" }
 
-bevy = "0.19.1"
-bevy_mod_openxr = { version = "0.6.0", features = ["fb_passthrough"] }
-bevy_mod_xr = "0.6.0"
-schminput = { git = "https://github.com/MaximilianHausen/Schminput.git", rev = "1ff3e94a008914c93227cc6023d5fb9ff1546ba8", features = ["xr"] }
+bevy = "0.20.0"
+bevy_mod_openxr = { git = "https://github.com/awtterpip/bevy_oxr.git", rev = "ce6799dbca9d80f2a658d39ad6ac4dc58c2fdc0d", features = ["fb_passthrough"] }
+bevy_mod_xr = { git = "https://github.com/awtterpip/bevy_oxr.git", rev = "ce6799dbca9d80f2a658d39ad6ac4dc58c2fdc0d" }
+schminput = { git = "https://github.com/MaximilianHausen/Schminput.git", rev = "b4ef651d01aa06465f8cee6b84c62540a6f8202c", features = ["xr"] }
 
 bytes = "1.12.1"
 derive_more = "2.1.1"

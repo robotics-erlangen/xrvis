@@ -83,7 +83,7 @@ impl Template for HostManagerTemplate {
         };
 
         let scene = bsn! {
-            inspector_base_scene()
+            @inspector_base_scene()
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
@@ -114,7 +114,7 @@ fn placeholder_scene() -> impl Scene {
             justify_content: JustifyContent::Center,
         }
         Children [
-            Text("No host found") TextFont {font_size: px(20)},
+            Text("No host found") TextFont {font_size: px(20)}
         ]
     }
 }
@@ -128,50 +128,46 @@ fn host_entry_scene(
     bsn! {
         HostUiRepresentsEntity(host_entity)
         @FeathersButton {
-            @caption: bsn_list! [
-                (
-                    Node {
-                        height: percent(100),
-                        aspect_ratio: {Some(1.0)},
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::Center,
-                    }
-                    Children [
-                        conn_indicator_scene(connected, spawned_as),
-                    ]
-                ),
-                (
-                    Text({host.to_string()})
-                    ThemedText
-                    // Padding to fix visual alignment
-                    Node {padding: UiRect::top(px(1.5))}
-                ),
-                Node {flex_grow: 1.0},
-                (
-                    @FeathersButton {
-                        @caption: bsn! {
-                            icon({if spawned_as.is_some() {Icon::Link2Off} else {Icon::Link2}}, px(12))
-                        },
-                    }
-                    Node {
-                        height: percent(100),
-                    }
-                    Visibility::Hidden
-                    on(on_connect_click)
-                ),
-                (
-                    @FeathersButton {
-                        @caption: bsn! {
-                            icon(if spawned_as.is_some() {Icon::CornerUpLeft} else {Icon::CornerRightDown}, px(12))
-                        },
-                    }
-                    Node {
-                        height: percent(100),
-                    }
-                    Visibility::Hidden
-                    on(on_spawn_click)
-                ),
-            ],
+            @caption: bsn_list! {
+                Node {
+                    height: percent(100),
+                    aspect_ratio: {Some(1.0)},
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                }
+                Children [
+                    @conn_indicator_scene(connected, spawned_as)
+                ]
+                --
+                Text({host.to_string()})
+                ThemedText
+                // Padding to fix visual alignment
+                Node {padding: UiRect::top(px(1.5))}
+                --
+                Node {flex_grow: 1.0}
+                --
+                @FeathersButton {
+                    @caption: bsn! {
+                        @icon({if spawned_as.is_some() {Icon::Link2Off} else {Icon::Link2}}, px(12))
+                    },
+                }
+                Node {
+                    height: percent(100),
+                }
+                Visibility::Hidden
+                on(on_connect_click)
+                --
+                @FeathersButton {
+                    @caption: bsn! {
+                        @icon(if spawned_as.is_some() {Icon::CornerUpLeft} else {Icon::CornerRightDown}, px(12))
+                    },
+                }
+                Node {
+                    height: percent(100),
+                }
+                Visibility::Hidden
+                on(on_spawn_click)
+            },
             @variant: ButtonVariant::Plain,
         }
         Node {
@@ -187,8 +183,8 @@ fn host_entry_scene(
 
 fn conn_indicator_scene(connected: bool, spawned_as: Option<u8>) -> impl Scene {
     bsn! {
-        conn_indicator_connected_patch(connected)
-        conn_indicator_spawned_patch(spawned_as)
+        @conn_indicator_connected_patch(connected)
+        @conn_indicator_spawned_patch(spawned_as)
     }
 }
 
@@ -214,7 +210,7 @@ fn conn_indicator_spawned_patch(spawned_as: Option<u8>) -> impl Scene {
                 justify_content: JustifyContent::Center,
             }
             Children [
-                Text({field_id.to_string()}) TextFont {font_size: px(12)},
+                Text({field_id.to_string()}) TextFont {font_size: px(12)}
             ]
         }) as Box<dyn Scene>
     } else {
@@ -231,7 +227,7 @@ fn conn_indicator_spawned_patch(spawned_as: Option<u8>) -> impl Scene {
 // ======== Add/Remove hosts ========
 
 fn on_new_host(
-    host_add: On<Add, Host>,
+    host_add: On<Add<Host>>,
     mut commands: Commands,
     q_manager: Query<(&Children, Entity), With<HostManager>>,
     q_host: Query<&Host>,
@@ -248,7 +244,7 @@ fn on_new_host(
     }
 }
 
-fn on_remove_last_entry(remove: On<Remove, Children>, mut commands: Commands) {
+fn on_remove_last_entry(remove: On<Remove<Children>>, mut commands: Commands) {
     // Atomic add + child, to avoid leaving a ghost scene when the event is coming from a full despawn
     commands.entity(remove.entity).queue_silenced(
         move |entity_world: EntityWorldMut| -> Result<(), BevyError> {
@@ -265,7 +261,7 @@ fn on_remove_last_entry(remove: On<Remove, Children>, mut commands: Commands) {
 // ======== Button interactions ========
 
 fn on_host_hover(
-    host_hover: On<Pointer<Enter>>,
+    host_hover: On<PointerEnter>,
     mut commands: Commands,
     q_children: Query<&Children>,
 ) {
@@ -280,7 +276,7 @@ fn on_host_hover(
 }
 
 fn on_host_unhover(
-    host_unhover: On<Pointer<Leave>>,
+    host_unhover: On<PointerLeave>,
     mut commands: Commands,
     q_children: Query<&Children>,
 ) {
@@ -382,7 +378,7 @@ fn on_spawn_click(
 // ======== Connection indicator ========
 
 fn on_host_connect(
-    host_connect: On<Add, HostConnection>,
+    host_connect: On<Add<HostConnection>>,
     mut commands: Commands,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
@@ -412,7 +408,7 @@ fn on_host_connect(
 }
 
 fn on_field_spawn(
-    field_spawn: On<Add, FieldId>,
+    field_spawn: On<Add<FieldId>>,
     mut commands: Commands,
     q_field: Query<(&FieldId, &GeometryHost)>,
     q_host: Query<&RepresentedByHostUi>,
@@ -443,7 +439,7 @@ fn on_field_spawn(
 }
 
 fn on_host_disconnect(
-    host_disconnect: On<Remove, HostConnection>,
+    host_disconnect: On<Remove<HostConnection>>,
     mut commands: Commands,
     q_host: Query<&RepresentedByHostUi>,
     q_children: Query<&Children>,
@@ -476,7 +472,7 @@ fn on_host_disconnect(
 }
 
 fn on_field_despawn(
-    field_despawn: On<Remove, FieldId>,
+    field_despawn: On<Remove<FieldId>>,
     mut commands: Commands,
     q_field: Query<&GeometryHost>,
     q_host: Query<&RepresentedByHostUi>,

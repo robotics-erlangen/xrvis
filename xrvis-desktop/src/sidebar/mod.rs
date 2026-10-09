@@ -1,8 +1,8 @@
 use crate::icons::icon;
 use crate::ui::{ImmediateActivate, TextOfComponent, regular_text, tokens};
 use bevy::feathers::controls::{ButtonVariant, FeathersButton};
-use bevy::feathers::cursor::EntityCursor;
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
+use bevy::picking::cursor::EntityCursor;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
@@ -91,29 +91,28 @@ pub fn scene() -> impl Scene {
             column_gap: px(6),
         }
         Children [
-            (
-                #Sidebar
-                Sidebar
-                InspectorType::default()
-                Node {
-                    height: percent(100),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(6),
+            #Sidebar
+            Sidebar
+            InspectorType::default()
+            Node {
+                height: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+            }
+            Children [
+                #PlusButton
+                @FeathersButton {
+                    @caption: bsn! { @icon(lucide_icons::Icon::Plus, px(24)) },
+                    @variant: ButtonVariant::Normal,
                 }
-                Children [
-                    #PlusButton
-                    @FeathersButton {
-                        @caption: bsn! { icon(lucide_icons::Icon::Plus, px(24)) },
-                        @variant: ButtonVariant::Normal,
-                    }
-                    Node {
-                        width: percent(100),
-                        height: Val::Auto,
-                        aspect_ratio: {Some(1.0)},
-                    }
-                    on(on_plus_click)
-                ]
-            ),
+                Node {
+                    width: percent(100),
+                    height: Val::Auto,
+                    aspect_ratio: {Some(1.0)},
+                }
+                on(on_plus_click)
+            ]
+            --
             // Open panel will be spawned here
         ]
     }
@@ -124,7 +123,7 @@ fn collapsed_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene
         #CollapsedFieldEntry
         SidebarEntryRepresents(field_entity)
         @FeathersButton {
-            @caption: bsn! { regular_text(field_id.to_string()) TextFont { font_size: px(20) } },
+            @caption: bsn! { @regular_text(field_id.to_string()) TextFont { font_size: px(20) } },
             @variant: ButtonVariant::Normal,
         }
         Node {
@@ -143,7 +142,7 @@ fn expanded_field_entry_scene(
 ) -> impl Scene {
     fn inspector_button(inspector_type: InspectorType) -> impl Scene {
         bsn! {
-            template_value(inspector_type)
+            inspector_type
             bevy::ui_widgets::Button
             Node {
                 width: percent(100),
@@ -154,12 +153,12 @@ fn expanded_field_entry_scene(
             }
             on(on_inspector_button_click)
             // Hover feedback for unselected buttons
-            on(|event: On<Pointer<Enter>>, mut commands: Commands, q_children: Query<&Children>| {
+            on(|event: On<PointerEnter>, mut commands: Commands, q_children: Query<&Children>| {
                 if let Ok(text_entity) = q_children.get(event.entity).map(|c| c[0]) {
                     commands.entity(text_entity).insert(ThemeTextColor(tokens::TEXT_0));
                 }
             })
-            on(|event: On<Pointer<Leave>>, mut commands: Commands, (q_parent, q_children): (Query<&ChildOf>, Query<&Children>), q_sidebar: Query<&InspectorType, With<Sidebar>>, q_inspector_button: Query<&InspectorType, Without<Sidebar>>| {
+            on(|event: On<PointerLeave>, mut commands: Commands, (q_parent, q_children): (Query<&ChildOf>, Query<&Children>), q_sidebar: Query<&InspectorType, With<Sidebar>>, q_inspector_button: Query<&InspectorType, Without<Sidebar>>| {
                 let button_type = q_inspector_button.get(event.entity).unwrap();
                 let selected_type = q_parent.iter_ancestors(event.entity).find_map(|e| q_sidebar.get(e).ok()).unwrap();
                 if button_type != selected_type && let Ok(text_entity) = q_children.get(event.entity).map(|c| c[0]) {
@@ -167,7 +166,7 @@ fn expanded_field_entry_scene(
                 }
             })
             Children [
-                icon(inspector_type.icon(), px(22)) ThemeTextColor(tokens::TEXT_1),
+                @icon(inspector_type.icon(), px(22)) ThemeTextColor(tokens::TEXT_1)
             ]
         }
     }
@@ -175,7 +174,7 @@ fn expanded_field_entry_scene(
     let inspector_buttons = InspectorType::all()
         .map(|inspector| {
             if inspector == initial_selection {
-                Box::new(bsn! { inspector_button(inspector) ImmediateActivate }) as Box<dyn Scene>
+                Box::new(bsn! { @inspector_button(inspector) ImmediateActivate }) as Box<dyn Scene>
             } else {
                 Box::new(inspector_button(inspector))
             }
@@ -209,7 +208,8 @@ fn expanded_field_entry_scene(
             }
             ThemeBackgroundColor(tokens::SIDEBAR_EXPANDED_FIELD_BUTTON)
             on(on_expanded_click)
-            Children [ regular_text(field_id.to_string()) TextFont { font_size: px(20) } TextOfComponent(#ExpandedFieldEntry) ],
+            Children [ @regular_text(field_id.to_string()) TextFont { font_size: px(20) } TextOfComponent(#ExpandedFieldEntry) ]
+            --
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: px(3),
@@ -223,7 +223,7 @@ fn expanded_field_entry_scene(
 }
 
 fn on_field_create(
-    field_add: On<Add, FieldId>,
+    field_add: On<Add<FieldId>>,
     mut commands: Commands,
     sidebar: Single<(Entity, &Children), With<Sidebar>>,
     q_field: Query<(&FieldId, Entity)>,
@@ -296,8 +296,8 @@ fn on_inspector_button_click(
         let field_entity = q_entry_field.get(expanded_entry_entity.0).unwrap().0;
         let inspector_type = q_inspector_type.get(button_entity).unwrap();
         let inspector_scene = bsn! {
-            {inspector_type.scene(field_entity)}
-            on(move |_: On<Despawn, Node>, mut commands: Commands, q_children: Query<&Children>| {
+            @{inspector_type.scene(field_entity)}
+            on(move |_: On<Despawn<Node>>, mut commands: Commands, q_children: Query<&Children>| {
                 if let Ok(button_children) = q_children.get(button_entity) {
                     commands.entity(button_children[0]).try_insert(ThemeTextColor(tokens::TEXT_1));
                 }
@@ -332,8 +332,8 @@ fn on_plus_click(
             commands.queue(replace_panel_command(
                 *container_entity,
                 Some(bsn! {
-                    host_manager::scene()
-                    on(move |_: On<Despawn, Node>, mut commands: Commands| {
+                    @host_manager::scene()
+                    on(move |_: On<Despawn<Node>>, mut commands: Commands| {
                         commands.entity(button_entity).try_insert(ButtonVariant::Normal);
                     })
                 }),

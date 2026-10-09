@@ -135,8 +135,9 @@ fn spawn_all_visualizations(
     for (yellow_host_ref, blue_host_ref, field_entity) in q_fields {
         for host_entity in yellow_host_ref.0.iter().chain(blue_host_ref.0.iter()) {
             let host_vis_list = q_hosts.get(host_entity).unwrap();
-            for (vis_name, vis_entity) in
-                q_new_visualizations.iter_many(host_vis_list.into_iter().flatten())
+            for (vis_name, vis_entity) in q_new_visualizations
+                .iter_many(host_vis_list.into_iter().flatten())
+                .matched()
             {
                 let name_lower = vis_name.0.to_ascii_lowercase();
                 if !name_lower.contains("zone") && !name_lower.contains("obstacle") {

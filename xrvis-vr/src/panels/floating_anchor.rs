@@ -1,6 +1,5 @@
 use crate::interaction::input::InputActions;
 use bevy::math::FloatPow;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy_mod_openxr::helper_traits::ToTransform;
 use bevy_mod_openxr::resources::OxrViews;

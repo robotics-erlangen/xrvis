@@ -94,107 +94,99 @@ fn global_settings_panel() -> impl Scene {
         }
         BackgroundColor(ZINC_700)
         Children [
-            label("Rendering Settings"),
-            (
-                #FieldToggleRow
-                Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                }
-                Children [
-                    label_small("Field"),
-                    (
-                        #FieldToggle
-                        @FeathersToggleSwitch
-                        on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
-                            render_settings.field = change.value;
-                            if change.value {
-                                commands.entity(change.source).insert(Checked);
-                            } else {
-                                commands.entity(change.source).remove::<Checked>();
-                            }
-                        })
-                    )
-                ]
-            ),
-            (
-                #RobotsToggleRow
-                Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                }
-                Children [
-                    label_small("Robots"),
-                    (
-                        #RobotsToggle
-                        @FeathersToggleSwitch
-                        on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
-                            render_settings.robots = if change.value { RobotRenderSettings::Fallback } else { RobotRenderSettings::Cutout };
-                            if change.value {
-                                commands.entity(change.source).insert(Checked);
-                            } else {
-                                commands.entity(change.source).remove::<Checked>();
-                            }
-                        })
-                    )
-                ]
-            ),
-            (
-                #BallToggleRow
-                Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                }
-                Children [
-                    label_small("Ball"),
-                    (
-                        #BallToggle
-                        @FeathersToggleSwitch
-                        on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
-                            render_settings.ball = change.value;
-                            if change.value {
-                                commands.entity(change.source).insert(Checked);
-                            } else {
-                                commands.entity(change.source).remove::<Checked>();
-                            }
-                        })
-                    )
-                ]
-            ),
-            (
-                #VisToggleRow
-                Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                }
-                Children [
-                    label_small("Visualizations"),
-                    (
-                        #VisToggle
-                        @FeathersToggleSwitch
-                        on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
-                            render_settings.visualizations = change.value;
-                            if change.value {
-                                commands.entity(change.source).insert(Checked);
-                            } else {
-                                commands.entity(change.source).remove::<Checked>();
-                            }
-                        })
-                    )
-                ]
-            ),
+            @label("Rendering Settings")
+            --
+            #FieldToggleRow
+            Node {
+                width: percent(100),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            Children [
+                @label_small("Field")
+                --
+                #FieldToggle
+                @FeathersToggleSwitch
+                on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
+                    render_settings.field = change.value;
+                    if change.value {
+                        commands.entity(change.source).insert(Checked);
+                    } else {
+                        commands.entity(change.source).remove::<Checked>();
+                    }
+                })
+            ]
+            --
+            #RobotsToggleRow
+            Node {
+                width: percent(100),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            Children [
+                @label_small("Robots")
+                --
+                #RobotsToggle
+                @FeathersToggleSwitch
+                on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
+                    render_settings.robots = if change.value { RobotRenderSettings::Fallback } else { RobotRenderSettings::Cutout };
+                    if change.value {
+                        commands.entity(change.source).insert(Checked);
+                    } else {
+                        commands.entity(change.source).remove::<Checked>();
+                    }
+                })
+            ]
+            --
+            #BallToggleRow
+            Node {
+                width: percent(100),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            Children [
+                @label_small("Ball")
+                --
+                #BallToggle
+                @FeathersToggleSwitch
+                on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
+                    render_settings.ball = change.value;
+                    if change.value {
+                        commands.entity(change.source).insert(Checked);
+                    } else {
+                        commands.entity(change.source).remove::<Checked>();
+                    }
+                })
+            ]
+            --
+            #VisToggleRow
+            Node {
+                width: percent(100),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            Children [
+                @label_small("Visualizations")
+                --
+                #VisToggle
+                @FeathersToggleSwitch
+                on(|change: On<ValueChange<bool>>, mut commands: Commands, mut render_settings: ResMut<sslgame::RenderSettings>| {
+                    render_settings.visualizations = change.value;
+                    if change.value {
+                        commands.entity(change.source).insert(Checked);
+                    } else {
+                        commands.entity(change.source).remove::<Checked>();
+                    }
+                })
+            ]
         ]
     }
 }

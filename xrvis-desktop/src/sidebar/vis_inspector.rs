@@ -67,7 +67,7 @@ impl Template for VisInspectorTemplate {
                 .unwrap();
 
             bsn! {
-                inspector_base_scene()
+                @inspector_base_scene()
                 Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: px(6),
@@ -75,14 +75,13 @@ impl Template for VisInspectorTemplate {
                 }
                 VisUiRepresentsEntity(field_entity)
                 Children [
-                    (
-                        Node {
-                            width: percent(100),
-                            column_gap: px(6),
-                        }
-                        Children [{host_tabs}]
-                    ),
-                    (vis_list),
+                    Node {
+                        width: percent(100),
+                        column_gap: px(6),
+                    }
+                    Children [{host_tabs}]
+                    --
+                    @vis_list
                 ]
             }
         });
@@ -121,61 +120,62 @@ fn host_tabs(
     // TODO: Button colors?
     match (yellow_host_ref.map(|h| h.0), blue_host_ref.map(|h| h.0)) {
         (None, None) => (
-            Box::new(bsn_list! [ Text({"Field with no robot hosts!".to_owned()}) ThemedText ]),
+            Box::new(bsn_list! { Text({"Field with no robot hosts!".to_owned()}) ThemedText }),
             None,
         ),
         (Some(yellow_host_entity), None) => (
-            Box::new(bsn_list! [
+            Box::new(bsn_list! {
                 VisUiRepresentsEntity(yellow_host_entity)
                 on(on_host_tab_click)
                 @FeathersButton {
                     @caption: bsn! { Text({"Yellow".to_owned()}) ThemedText },
                     @variant: ButtonVariant::Normal,
                 }
-            ]),
+            }),
             Some(yellow_host_entity),
         ),
         (None, Some(blue_host_entity)) => (
-            Box::new(bsn_list! [
+            Box::new(bsn_list! {
                 VisUiRepresentsEntity(blue_host_entity)
                 on(on_host_tab_click)
                 @FeathersButton {
                     @caption: bsn! { Text({"Blue".to_owned()}) ThemedText },
                     @variant: ButtonVariant::Normal,
                 }
-            ]),
+            }),
             Some(blue_host_entity),
         ),
         (Some(yellow_host_entity), Some(blue_host_entity))
             if yellow_host_entity == blue_host_entity =>
         {
             (
-                Box::new(bsn_list! [
+                Box::new(bsn_list! {
                     VisUiRepresentsEntity(yellow_host_entity)
                     on(on_host_tab_click)
                     @FeathersButton {
                         @caption: bsn! { Text({"Yellow + Blue".to_owned()}) ThemedText },
                         @variant: ButtonVariant::Normal,
                     }
-                ]),
+                }),
                 Some(yellow_host_entity),
             )
         }
         (Some(yellow_host_entity), Some(blue_host_entity)) => (
-            Box::new(bsn_list! [
+            Box::new(bsn_list! {
                 VisUiRepresentsEntity(yellow_host_entity)
                 on(on_host_tab_click)
                 @FeathersButton {
                     @caption: bsn! { Text({"Yellow".to_owned()}) ThemedText },
                     @variant: ButtonVariant::Normal,
-                },
+                }
+                --
                 VisUiRepresentsEntity(blue_host_entity)
                 on(on_host_tab_click)
                 @FeathersButton {
                     @caption: bsn! { Text({"Blue".to_owned()}) ThemedText },
                     @variant: ButtonVariant::Plain,
                 }
-            ]),
+            }),
             Some(yellow_host_entity),
         ),
     }
@@ -206,6 +206,7 @@ fn vis_list_for_host(
                 .map(|a| a.0.to_lowercase())
                 .cmp(&name_b.map(|b| b.0.to_lowercase()))
         })
+        .filter_map(|r| r.ok())
         .map(|(source_id, source_name, source_entity, source_children)| {
             // Build the visualization list for this source
             let vis_ui_scenes = q_vis
@@ -215,9 +216,11 @@ fn vis_list_for_host(
                         .map(|a| a.0.to_lowercase())
                         .cmp(&name_b.map(|b| b.0.to_lowercase()))
                 })
+                .filter_map(|r| r.ok())
                 .map(|(vis_id, vis_name, vis_usages, vis_entity)| {
                     let checked = q_parent
                         .iter_many(vis_usages.into_iter().flatten())
+                        .matched()
                         .any(|instance_parent| instance_parent.0 == field_entity);
                     let maybe_checked = SceneFunction(move |context, scene| {
                         if checked {
@@ -225,8 +228,8 @@ fn vis_list_for_host(
                         }
                     });
                     bsn! {
-                        vis_ui_scene(vis_entity, vis_id.clone(), vis_name.cloned())
-                        maybe_checked
+                        @vis_ui_scene(vis_entity, vis_id.clone(), vis_name.cloned())
+                        @maybe_checked
                     }
                 })
                 .collect::<Vec<_>>();
@@ -255,7 +258,7 @@ fn vis_list_for_host(
 // ======== UI interaction ========
 
 fn on_host_tab_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     mut commands: Commands,
     q_vis_ui: Query<&VisUiRepresentsEntity>,
     (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
@@ -276,7 +279,7 @@ fn on_host_tab_click(
                 .unwrap();
             world
                 .spawn_scene(bsn! {
-                    new_vis_list
+                    @new_vis_list
                     ChildOf(inspector_entity)
                 })
                 .unwrap();
@@ -352,6 +355,7 @@ fn on_vis_toggled(
         // Despawn the visualization instance
         q_parent
             .iter_many(q_vis_usages.get(vis_entity).unwrap())
+            .matched()
             .for_each(|(instance_parent, instance_entity)| {
                 if instance_parent.0 == field_entity {
                     commands.entity(instance_entity).despawn();
@@ -394,9 +398,11 @@ fn source_ui_scene(
                 column_gap: px(6),
             }
             Children [
-                @FeathersDisclosureToggle Checked on(on_disclosure_click),
-                regular_text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root),
-            ],
+                @FeathersDisclosureToggle Checked on(on_disclosure_click)
+                --
+                @regular_text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root)
+            ]
+            --
             @FeathersListView {
                 @rows: {Box::new(vis_list) as Box<dyn SceneList>},
             }
@@ -409,7 +415,7 @@ fn source_ui_scene(
 }
 
 fn on_new_vis_source(
-    vis_added: On<Add, VisualizationSourceId>,
+    vis_added: On<Add<VisualizationSourceId>>,
     mut commands: Commands,
     q_source: Query<(
         &VisualizationSourceId,
@@ -436,7 +442,7 @@ fn on_new_vis_source(
                 vis_added.entity,
                 source_id.clone(),
                 source_name.cloned(),
-                bsn_list![],
+                bsn_list! {},
             ))
             .id();
 
@@ -470,7 +476,7 @@ fn vis_ui_scene(
 }
 
 fn on_new_vis(
-    vis_added: On<Add, VisualizationId>,
+    vis_added: On<Add<VisualizationId>>,
     mut commands: Commands,
     q_vis: Query<(&VisualizationId, Option<&VisualizationName>, &ChildOf)>,
     q_source: Query<&RepresentedByVisUi, With<VisualizationSourceId>>,
@@ -499,7 +505,7 @@ fn on_new_vis(
 // ======== Name updates ========
 
 fn on_source_name_insert(
-    name_inserted: On<Insert, VisualizationSourceName>,
+    name_inserted: On<Insert<VisualizationSourceName>>,
     mut commands: Commands,
     q_source: Query<(&VisualizationSourceName, &RepresentedByVisUi)>,
     q_entry: Query<(&ComponentText, &ChildOf)>,
@@ -524,7 +530,7 @@ fn on_source_name_insert(
 }
 
 fn on_vis_name_insert(
-    name_inserted: On<Insert, VisualizationName>,
+    name_inserted: On<Insert<VisualizationName>>,
     mut commands: Commands,
     q_vis: Query<(&VisualizationName, &RepresentedByVisUi)>,
     q_entry: Query<(&ComponentText, &ChildOf)>,
@@ -551,7 +557,7 @@ fn on_vis_name_insert(
 // ======== Inactive markings ========
 
 fn on_vis_inactive(
-    vis_inactive: On<Add, InactiveVisualization>,
+    vis_inactive: On<Add<InactiveVisualization>>,
     mut commands: Commands,
     q_vis: Query<&RepresentedByVisUi>,
     q_text_ref: Query<&ComponentText>,
@@ -567,7 +573,7 @@ fn on_vis_inactive(
 }
 
 fn on_vis_active(
-    vis_active: On<Remove, InactiveVisualization>,
+    vis_active: On<Remove<InactiveVisualization>>,
     mut commands: Commands,
     q_vis: Query<&RepresentedByVisUi>,
     q_text_ref: Query<&ComponentText>,

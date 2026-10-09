@@ -3,7 +3,7 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 
 // TODO: statically include shader as a string
-const SHADER_ASSET_PATH: &str = "shaders/discard_fragment.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/discard_fragment.wesl";
 
 /// Material that makes objects only show up in the depth prepass, but discards them during actual rendering.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
