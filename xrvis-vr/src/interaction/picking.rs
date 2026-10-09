@@ -2,10 +2,9 @@ use crate::interaction::input::{InputActions, LeftHandPointer, RightHandPointer}
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};
-use bevy::math::Ray3d;
 use bevy::picking::PickingSystems;
 use bevy::picking::pointer::{
-    Location, PointerAction, PointerId, PointerInput, PointerLocation, PointerPress,
+    Location, PointerAction, PointerId, PointerInput, PointerLocation, PointerPressState,
 };
 use bevy::prelude::*;
 use schminput::BoolActionValue;
@@ -126,7 +125,7 @@ pub fn update_hand_pointer_rays(
 pub fn drive_ui_pointers(
     mut gizmos: Gizmos,
     // Pointers
-    pointers: Query<(&XrPointer, &PointerId, &PointerLocation, &PointerPress)>,
+    pointers: Query<(&XrPointer, &PointerId, &PointerLocation, &PointerPressState)>,
     // Panels
     panels: Query<(&GlobalTransform, Option<&InheritedVisibility>), With<SpatialPanel>>,
     ui_roots: Query<(&UiTargetCamera, &SpatialUiRoot)>,

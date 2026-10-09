@@ -54,6 +54,7 @@ impl Template for RobotsInspectorTemplate {
                 .flatten();
             q_robots
                 .iter_many(world, field_children)
+                .matched()
                 .map(|(robot, team, entity)| (*robot, *team, entity))
                 .collect::<Vec<_>>()
         });
@@ -89,9 +90,10 @@ impl Template for RobotsInspectorTemplate {
                     }
                     ThemeBackgroundColor(higher_col)
                     Children [
-                        regular_text(text) TextFont { font_size: px(14) }
-                    ],
-                    regular_text(robot_count.to_string()) TextFont { font_size: px(14) }
+                        @regular_text(text) TextFont { font_size: px(14) }
+                    ]
+                    --
+                    @regular_text(robot_count.to_string()) TextFont { font_size: px(14) }
                 ]
             }
         }
@@ -129,17 +131,20 @@ impl Template for RobotsInspectorTemplate {
         let (blue_robot_grid, blue_robot_count) = robots_grid(Team::Blue, &robots);
 
         let scene = bsn! {
-            inspector_base_scene()
+            @inspector_base_scene()
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: px(10),
                 padding: px(6),
             }
             Children [
-                header(Team::Yellow, yellow_robot_count),
-                yellow_robot_grid,
-                header(Team::Blue, blue_robot_count),
-                blue_robot_grid,
+                @header(Team::Yellow, yellow_robot_count)
+                --
+                @yellow_robot_grid
+                --
+                @header(Team::Blue, blue_robot_count)
+                --
+                @blue_robot_grid
             ]
         };
 
@@ -168,13 +173,13 @@ fn robot_card(team: Team, robot_id: u8, robot_entity: Entity) -> impl Scene {
         }
         ThemeBackgroundColor(feathers::tokens::BUTTON_BG)
         Children [
-            TextOfComponent(#RobotCardRoot) regular_text(format!("Robot {}", robot_id))
+            TextOfComponent(#RobotCardRoot) @regular_text(format!("Robot {}", robot_id))
         ]
     }
 }
 
 fn on_robot_add(
-    event: On<Add, Robot>,
+    event: On<Add<Robot>>,
     mut commands: Commands,
     q_robot: Query<(&Robot, &Team)>,
     (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),

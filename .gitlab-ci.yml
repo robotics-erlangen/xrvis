@@ -1,4 +1,4 @@
-image: xrvis-ci:1.95
+image: xrvis-ci:1.97.1
 
 stages:
   - check

@@ -139,8 +139,9 @@ fn score_panel(state_source: Entity) -> impl Scene {
         }
         BackgroundColor(ZINC_700)
         Children [
-            (#Score Text("0:0") TextFont { font_size: px(20.) }),
-            (#Stage Text("GameStage") TextFont { font_size: px(8.) }),
+            #Score Text("0:0") TextFont { font_size: px(20.) }
+            --
+            #Stage Text("GameStage") TextFont { font_size: px(8.) }
         ]
     }
 }
@@ -239,75 +240,65 @@ fn team_panel(state_source: Entity, team: Team, right_aligned: bool) -> impl Sce
         }
         BackgroundColor(ZINC_700)
         Children [
-            (
-                #TeamLogo
-                ImageNode { image: "teams/logos/unknown.png" }
+            #TeamLogo
+            ImageNode { image: "teams/logos/unknown.png" }
+            Node {
+                height: percent(100.),
+                aspect_ratio: {Some(1.)},
+            }
+            --
+            #Content
+            Node {
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Stretch,
+                row_gap: px(2.),
+            }
+            Children [
+                #TeamName Text("Unknown") TextFont{font_size: px(14.)}
+                --
+                #CardRow
                 Node {
-                    height: percent(100.),
-                    aspect_ratio: {Some(1.)},
-                }
-            ),
-            (
-                #Content
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Stretch,
-                    row_gap: px(2.),
+                    height: px(10.),
+                    flex_direction,
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::Center,
+                    column_gap: px(5.),
                 }
                 Children [
-                    (#TeamName Text("Unknown") TextFont{font_size: px(14.)}),
-                    (
-                        #CardRow
-                        Node {
-                            height: px(10.),
-                            flex_direction,
-                            justify_content: JustifyContent::FlexStart,
-                            align_items: AlignItems::Center,
-                            column_gap: px(5.),
-                        }
-                        Children [
-                            (
-                                #FoulPill
-                                Node {
-                                    height: percent(100.),
-                                    aspect_ratio: {Some(1.)},
-                                    border_radius: percent(100.),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                }
-                                BackgroundColor(ZINC_500)
-                                Children [(#FoulText Text("0") TextFont{font_size: px(6.)})]
-                            )
-                            // Deduplicating these is impossible right now because we need to get the text references in the top-level component
-                            (
-                                #YellowCardPill
-                                card_pill(YELLOW_400.into())
-                                Children [
-                                    (
-                                        #YellowCardIcon
-                                        ImageNode { image: "icons/card.png" }
-                                        Node { width: px(6.), height: px(6.) }
-                                    ),
-                                    (#YellowCardText Text("0") TextFont{font_size: px(6.)})
-                                ]
-                            ),
-                            (
-                                #RedCardPill
-                                card_pill(RED_400.into())
-                                Children [
-                                    (
-                                        #RedCardIcon
-                                        ImageNode { image: "icons/card.png" }
-                                        Node { width: px(6.), height: px(6.) }
-                                    ),
-                                    (#RedCardText Text("0") TextFont{font_size: px(6.)})
-                                ]
-                            )
-                        ]
-                    )
+                    #FoulPill
+                    Node {
+                        height: percent(100.),
+                        aspect_ratio: {Some(1.)},
+                        border_radius: percent(100.),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                    }
+                    BackgroundColor(ZINC_500)
+                    Children [#FoulText Text("0") TextFont{font_size: px(6.)}]
+                    --
+                    // Deduplicating these is impossible right now because we need to get the text references in the top-level component
+                    #YellowCardPill
+                    @card_pill(YELLOW_400.into())
+                    Children [
+                        #YellowCardIcon
+                        ImageNode { image: "icons/card.png" }
+                        Node { width: px(6.), height: px(6.) }
+                        --
+                        #YellowCardText Text("0") TextFont{font_size: px(6.)}
+                    ]
+                    --
+                    #RedCardPill
+                    @card_pill(RED_400.into())
+                    Children [
+                        #RedCardIcon
+                        ImageNode { image: "icons/card.png" }
+                        Node { width: px(6.), height: px(6.) }
+                        --
+                        #RedCardText Text("0") TextFont{font_size: px(6.)}
+                    ]
                 ]
-            )
+            ]
         ]
     }
 }

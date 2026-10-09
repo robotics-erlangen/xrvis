@@ -95,7 +95,8 @@ pub(crate) fn update_visualization_names(
     };
 
     let mut source_iter = q_vis_sources.iter_many_mut(source_entities.into_iter().flatten());
-    while let Some((source_id, source_name, vis_entities, source_entity)) = source_iter.fetch_next()
+    while let Some(Ok((source_id, source_name, vis_entities, source_entity))) =
+        source_iter.fetch_next()
     {
         // Update source name
         if let Some(new_name) = vis_mappings.source.get(&source_id.0) {
@@ -110,7 +111,7 @@ pub(crate) fn update_visualization_names(
 
         // Update visualization names
         let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
-        while let Some((vis_id, vis_name, vis_entity)) = vis_iter.fetch_next() {
+        while let Some(Ok((vis_id, vis_name, vis_entity))) = vis_iter.fetch_next() {
             if let Some(new_name) = vis_mappings.name.get(&vis_id.0) {
                 commands
                     .entity(vis_entity)
@@ -198,7 +199,9 @@ pub(crate) fn update_visualizations(
     let mut new_source_list = vis_update.visualization_set;
 
     // Update the existing sources
-    for (source_id, source_entity, vis_entities) in q_vis_sources.iter_many(source_entities) {
+    for (source_id, source_entity, vis_entities) in
+        q_vis_sources.iter_many(source_entities).matched()
+    {
         // Get all new messages for this source. There should only be one, but that isn't actually
         // enforced in the protocol to make minimal host implementations easier.
         let new_source = new_source_list.extract_if(.., |vs| vs.source == source_id.0);
@@ -220,7 +223,7 @@ pub(crate) fn update_visualizations(
 
         // Update the existing visualizations in this source
         let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
-        while let Some((vis_id, vis_data, vis_usages, vis_entity)) = vis_iter.fetch_next() {
+        while let Some(Ok((vis_id, vis_data, vis_usages, vis_entity))) = vis_iter.fetch_next() {
             // Skip if the group doesn't match
             if vis_id.0 % group_selector.group_count != group_selector.group {
                 continue;
@@ -330,7 +333,7 @@ fn update_visualization_instances(
 
                 commands.entity(vis_instance_entity).insert((
                     Mesh3d(vis_mesh),
-                    MeshMaterial3d(material.opaque.clone()), // TODO: Switch back to translucent. Frustum culling for translucents with NoIndirectDrawing broke in bevy 0.19
+                    MeshMaterial3d(material.translucent.clone()),
                 ));
             }
         }
@@ -350,12 +353,12 @@ fn send_vis_selection(
         let mut host_changed = false;
 
         let mut filter = proto::remote::VisualizationFilter::default();
-        for (source_id, vis_entities) in q_vis_sources.iter_many(source_entities) {
+        for (source_id, vis_entities) in q_vis_sources.iter_many(source_entities).matched() {
             if vis_entities.iter().any(|e| last_usage_removed.contains(&e)) {
                 host_changed = true;
             }
 
-            for (vis_id, vis_usages) in q_visualizations.iter_many(vis_entities) {
+            for (vis_id, vis_usages) in q_visualizations.iter_many(vis_entities).matched() {
                 // Empty VisualizationUsages are automatically removed by the relationship hooks
                 if vis_usages.is_changed() {
                     host_changed = true;

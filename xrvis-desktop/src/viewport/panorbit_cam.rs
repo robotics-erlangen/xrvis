@@ -31,7 +31,7 @@ pub struct ViewportCamera {
 pub struct ViewportCameraOrbitTarget(pub Vec3);
 
 fn initial_camera_look(
-    new_cam: On<Add, ViewportCamera>,
+    new_cam: On<Add<ViewportCamera>>,
     mut q_cam: Query<(&mut Transform, &ViewportCameraOrbitTarget)>,
 ) {
     if let Ok((mut cam_transform, cam_target)) = q_cam.get_mut(new_cam.entity) {

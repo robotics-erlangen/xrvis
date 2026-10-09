@@ -67,8 +67,9 @@ fn startup(mut commands: Commands) {
         }
         ThemeBackgroundColor(tokens::WINDOW_BG)
         Children [
-            sidebar::scene(),
-            viewport::scene(),
+            @sidebar::scene()
+            --
+            @viewport::scene()
         ]
     });
 }
