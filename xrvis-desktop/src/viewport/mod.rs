@@ -1,5 +1,3 @@
-mod panorbit_cam;
-
 use crate::viewport::panorbit_cam::ViewportCamera;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
@@ -8,6 +6,8 @@ use bevy::ecs::template::TemplateContext;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+
+mod panorbit_cam;
 
 pub fn viewport_plugin(app: &mut App) {
     app.add_plugins(panorbit_cam::panorbit_camera_plugin);

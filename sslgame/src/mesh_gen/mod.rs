@@ -1,6 +1,3 @@
-pub mod field;
-pub mod vis;
-
 use crate::proto;
 use bevy::asset::RenderAssetUsages;
 use bevy::color::{Color, ColorToComponents};
@@ -9,6 +6,9 @@ use bevy::mesh::{Indices, Mesh, PrimitiveTopology, VertexAttributeValues};
 use earcut::Earcut;
 use std::f32::consts::PI;
 use std::iter;
+
+pub mod field;
+pub mod vis;
 
 /// A builder for constructing 3D meshes programmatically.
 ///

@@ -1,3 +1,8 @@
+use crate::fields::Field;
+use crate::fields::robots::{Ball, Robot};
+use bevy::prelude::*;
+use hosts::visualizations::VisualizationInstance;
+
 pub mod proto {
     pub mod remote {
         include!(concat!(env!("OUT_DIR"), "/remote.rs"));
@@ -10,11 +15,6 @@ mod mesh_gen;
 mod network_tasks;
 pub mod panels;
 mod transform_filter;
-
-use crate::fields::Field;
-use crate::fields::robots::{Ball, Robot};
-use bevy::prelude::*;
-use hosts::visualizations::VisualizationInstance;
 
 pub fn ssl_game_plugin(app: &mut App) {
     app.add_plugins((fields::field_plugin, hosts::host_plugin));

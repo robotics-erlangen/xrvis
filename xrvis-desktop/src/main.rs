@@ -1,14 +1,14 @@
-mod icons;
-mod sidebar;
-mod ui;
-mod viewport;
-
 use crate::ui::tokens;
 use bevy::dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin};
 use bevy::feathers::FeathersPlugins;
 use bevy::feathers::theme::{ThemeBackgroundColor, UiTheme};
 use bevy::prelude::*;
 use sslgame::ssl_game_plugin;
+
+mod icons;
+mod sidebar;
+mod ui;
+mod viewport;
 
 fn main() {
     let mut app = App::new();

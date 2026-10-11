@@ -1,8 +1,8 @@
-pub mod host_transfer;
-pub mod robots;
-
 use bevy::prelude::*;
 use std::cmp::PartialEq;
+
+pub mod host_transfer;
+pub mod robots;
 
 /// Transfers data that was received by the [host_plugin](crate::hosts::host_plugin) to every fields connected via
 /// host relations ([GeometryHost](crate::hosts::GeometryHost), [YellowRobotHost](crate::hosts::YellowRobotHost), ...).

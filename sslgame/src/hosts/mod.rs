@@ -1,7 +1,3 @@
-pub mod data;
-pub mod discovery;
-pub mod visualizations;
-
 use crate::fields::robots::update_world_state;
 use crate::hosts::data::{FieldGeometry, GameState};
 use crate::hosts::visualizations::{update_visualization_names, update_visualizations};
@@ -15,6 +11,10 @@ use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task};
 use std::net::SocketAddr;
 use std::time::Instant;
+
+pub mod data;
+pub mod discovery;
+pub mod visualizations;
 
 /// Named system set in [PreUpdate] to allow scheduling other systems directly after new host data is received.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,10 +1,10 @@
-pub mod theme;
-pub mod tokens;
-
 use bevy::feathers::constants::fonts;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 use bevy::ui_widgets::Activate;
+
+pub mod theme;
+pub mod tokens;
 
 pub fn ui_plugin(app: &mut App) {
     app.add_systems(PostUpdate, handle_immediate_activate);
