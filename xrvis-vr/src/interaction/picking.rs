@@ -13,7 +13,7 @@ use sslgame::fields::{Field, Team};
 use sslgame::hosts::data::FieldGeometry;
 use sslgame::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowRobotHost};
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
-use sslgame::proto::remote::{RobotCommand, RobotMoveTarget, RobotRef, robot_command, ws_request};
+use sslgame::proto::{RobotCommand, RobotMoveTarget, RobotRef, robot_command, ws_request};
 use std::ops::Range;
 use std::time::Instant;
 

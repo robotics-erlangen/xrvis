@@ -1,4 +1,4 @@
-use crate::proto::remote::Visualization;
+use crate::proto::Visualization;
 use bevy::mesh::Mesh;
 
 pub mod simple;

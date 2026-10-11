@@ -408,7 +408,7 @@ fn circle_vertices(
     })
 }
 
-fn bevy_col(proto_col: proto::remote::Color) -> Color {
+fn bevy_col(proto_col: proto::Color) -> Color {
     Color::srgba_u8(
         proto_col.red as u8,
         proto_col.green as u8,

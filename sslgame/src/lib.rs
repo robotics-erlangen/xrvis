@@ -4,9 +4,7 @@ use bevy::prelude::*;
 use hosts::visualizations::VisualizationInstance;
 
 pub mod proto {
-    pub mod remote {
-        include!(concat!(env!("OUT_DIR"), "/remote.rs"));
-    }
+    include!(concat!(env!("OUT_DIR"), "/remote.rs"));
 }
 mod depth_mask_material;
 pub mod fields;

@@ -5,9 +5,9 @@ use bevy::prelude::*;
 
 /// Component for holding the current game state of a host or fields
 #[derive(Component, Deref, Debug, Default, Clone, PartialEq, Eq)]
-pub struct GameState(pub proto::remote::GameState);
+pub struct GameState(pub proto::GameState);
 
-/// Simplified SSL fields geometry, a more ergonomic version of [proto::FieldGeometry](crate::proto::remote::FieldGeometry).
+/// Simplified SSL fields geometry, a more ergonomic version of [proto::FieldGeometry](crate::proto::FieldGeometry).
 /// The network protocol marks most values as optional, so they will be filled in with reasonable defaults when converting with .into().
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct FieldGeometry {
@@ -38,8 +38,8 @@ impl Default for FieldGeometry {
     }
 }
 
-impl From<proto::remote::FieldGeometry> for FieldGeometry {
-    fn from(proto: proto::remote::FieldGeometry) -> Self {
+impl From<proto::FieldGeometry> for FieldGeometry {
+    fn from(proto: proto::FieldGeometry) -> Self {
         FieldGeometry {
             play_area_size: Vec2::new(proto.field_size_x, proto.field_size_y),
             boundary_width: proto.boundary_width.unwrap_or(0.0),

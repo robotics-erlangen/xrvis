@@ -1,7 +1,7 @@
 use crate::hosts::{Host, HostConnection};
 use crate::proto;
-use crate::proto::remote::vis_shape::Geom;
-use crate::proto::remote::{VisMappings, Visualization, VisualizationUpdate};
+use crate::proto::vis_shape::Geom;
+use crate::proto::{VisMappings, Visualization, VisualizationUpdate};
 use bevy::prelude::*;
 use derive_more::IntoIterator;
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ pub(crate) fn update_visualization_names(
 
 /// Updates the visualization entities for a single host. This system only provides the
 /// [VisualizationId] and the [VisualizationData], the names are managed by [update_visualization_names].
-/// Also note that hosts with an active [proto::VisualizationFilter](crate::proto::remote::VisualizationFilter)
+/// Also note that hosts with an active [proto::VisualizationFilter](crate::proto::VisualizationFilter)
 /// won't provide data for excluded entities, but they will still be present with an id.
 /// The generated structure looks like this:\
 /// \- ([Host], [HostConnection])\
@@ -186,7 +186,7 @@ pub(crate) fn update_visualizations(
 
     let group_selector = vis_update
         .group_selector
-        .unwrap_or(proto::remote::VisGroupSelector {
+        .unwrap_or(proto::VisGroupSelector {
             group: 0,
             group_count: 1,
         });
@@ -303,7 +303,7 @@ pub(crate) fn update_visualizations(
     }
 }
 
-/// Sends a [proto::VisualizationFilter](crate::proto::remote::VisualizationFilter) to the host, based on which visualization entities have [VisualizationUsages].
+/// Sends a [proto::VisualizationFilter](crate::proto::VisualizationFilter) to the host, based on which visualization entities have [VisualizationUsages].
 fn send_vis_selection(
     q_hosts: Query<(&Host, &HostConnection, &Children)>,
     q_vis_sources: Query<(&VisualizationSourceId, &Children)>,
@@ -315,7 +315,7 @@ fn send_vis_selection(
     for (host, host_connection, source_entities) in q_hosts {
         let mut host_changed = false;
 
-        let mut filter = proto::remote::VisualizationFilter::default();
+        let mut filter = proto::VisualizationFilter::default();
         for (source_id, vis_entities) in q_vis_sources.iter_many(source_entities).matched() {
             if vis_entities.iter().any(|e| last_usage_removed.contains(&e)) {
                 host_changed = true;
@@ -328,7 +328,7 @@ fn send_vis_selection(
                 }
 
                 filter.allowed_visualizations.push(
-                    proto::remote::visualization_filter::VisualizationFilterEntry {
+                    proto::visualization_filter::VisualizationFilterEntry {
                         source_id: Some(source_id.0),
                         vis_id: Some(vis_id.0),
                     },
@@ -340,7 +340,7 @@ fn send_vis_selection(
             debug!("Sending vis selection to host {}: {:?}", host, filter);
             _ = host_connection
                 .sender
-                .send_blocking(proto::remote::ws_request::Content::SetVisFilter(filter));
+                .send_blocking(proto::ws_request::Content::SetVisFilter(filter));
         }
     }
 }

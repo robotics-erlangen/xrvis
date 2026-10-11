@@ -1,7 +1,7 @@
 use crate::mesh_gen::{CustomMeshBuilder, bevy_col, circle_vertices, with_col};
 use crate::proto;
-use crate::proto::remote::vis_shape::Geom;
-use crate::proto::remote::{VisShape, Visualization};
+use crate::proto::vis_shape::Geom;
+use crate::proto::{VisShape, Visualization};
 use bevy::mesh::Mesh;
 use tracing::warn;
 
@@ -34,7 +34,7 @@ pub fn simple_vis_mesh(vis_list: &[&Visualization]) -> Mesh {
     mesh.build(false)
 }
 
-fn vis_point(p_2d: &proto::remote::Point) -> [f32; 3] {
+fn vis_point(p_2d: &proto::Point) -> [f32; 3] {
     [p_2d.x, Z_HEIGHT, p_2d.y]
 }
 fn border_width(shape: &VisShape) -> f32 {

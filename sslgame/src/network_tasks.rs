@@ -1,4 +1,4 @@
-use crate::proto::remote::*;
+use crate::proto::*;
 use async_channel::{Receiver, Sender, TrySendError};
 use async_net::UdpSocket;
 use async_tungstenite::tungstenite;

@@ -1,7 +1,7 @@
 use crate::depth_mask_material::DepthMaskMaterial;
 use crate::fields::Team;
 use crate::hosts::{BallFields, BlueRobotFields, Host, YellowRobotFields};
-use crate::proto::remote::WorldState;
+use crate::proto::WorldState;
 use crate::transform_filter::{TransformFilter, apply_filtered_transform};
 use crate::{RenderSettings, RobotRenderSettings, proto};
 use bevy::asset::{AssetServer, Assets, Handle};
@@ -128,7 +128,7 @@ pub(crate) fn update_world_state(
         }
     }
 
-    let mut update_robots = |field: Entity, team: Team, new_robots: &[proto::remote::Robot]| {
+    let mut update_robots = |field: Entity, team: Team, new_robots: &[proto::Robot]| {
         let mut leftover_robots = q_robots
             .iter_mut()
             .filter(|(_, robot_team, _, c, _)| c.parent() == field && **robot_team == team)
