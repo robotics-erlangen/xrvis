@@ -1,6 +1,6 @@
 use crate::depth_mask_material::DepthMaskMaterial;
-use crate::field::Team;
-use crate::field::hosts::{BallFields, BlueRobotFields, Host, YellowRobotFields};
+use crate::fields::Team;
+use crate::hosts::{BallFields, BlueRobotFields, Host, YellowRobotFields};
 use crate::proto::remote::WorldState;
 use crate::transform_filter::{TransformFilter, apply_filtered_transform};
 use crate::{RenderSettings, RobotRenderSettings, proto};
@@ -14,6 +14,8 @@ use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::*;
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
+
+// TODO: Refactor all of this. The plugin does setup for unrelated code like transform filtering, and the rest is just one huge function that behaves differently from everything else in host_transfer.
 
 pub fn robot_plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
@@ -56,7 +58,7 @@ pub(crate) struct RobotMaskMesh(Handle<Mesh>, Handle<DepthMaskMaterial>);
 #[derive(Resource, Debug)]
 pub(crate) struct BallMesh(Handle<Mesh>, Handle<StandardMaterial>);
 
-/// Updates the robots and balls on a single field to a new WorldState. Has to be called manually using Commands::run_system_cached_with.
+/// Updates the robots and balls on a single fields to a new WorldState. Has to be called manually using Commands::run_system_cached_with.
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_world_state(
     In((host_entity, mut world_state, rx_time)): In<(Entity, WorldState, Instant)>,

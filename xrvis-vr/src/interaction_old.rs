@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::hands::{HandBone, RightHand, XrHandBoneEntities, XrHandBoneRadius};
-use sslgame::field::Field;
+use sslgame::fields::Field;
 
 // TODO: Replace this with UI panels and system-level input actions
 
@@ -67,8 +67,8 @@ fn right_hand_interaction(
                 dir.y = 0.0;
                 if dir.length_squared() > 1e-6 {
                     let dir = dir.normalize();
-                    // Compute yaw so the field faces along dir while staying parallel to ground.
-                    // We build a rotation that aligns the field's local -Z axis to `dir`.
+                    // Compute yaw so the fields faces along dir while staying parallel to ground.
+                    // We build a rotation that aligns the fields's local -Z axis to `dir`.
                     // Angle around Y axis between -Z and `dir`:
                     let yaw = f32::atan2(dir.x, dir.z);
                     // Rotate around Y by -yaw so that -Z ends up pointing along `dir`.

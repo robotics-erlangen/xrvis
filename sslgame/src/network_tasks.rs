@@ -318,7 +318,7 @@ pub async fn io_task(
                 if let Some(packet_content) = packet.content {
                     Ok(StreamEvent::WsPacket(packet_content))
                 } else {
-                    debug!("Received empty oneof protobuf field");
+                    debug!("Received empty oneof protobuf fields");
                     Ok(StreamEvent::None)
                 }
             }
@@ -352,7 +352,7 @@ pub async fn io_task(
                 if let Some(packet_content) = p.content {
                     StreamEvent::UdpPacket(packet_content)
                 } else {
-                    debug!("Received empty oneof protobuf field");
+                    debug!("Received empty oneof protobuf fields");
                     StreamEvent::None
                 }
             });

@@ -72,7 +72,7 @@ pub struct FieldId(pub u8);
 #[derive(Component, Clone, Default)]
 struct Sidebar;
 
-/// Marker component for expanded field entries. There should only ever be one expanded entry in the sidebar, and it should be the first child.
+/// Marker component for expanded fields entries. There should only ever be one expanded entry in the sidebar, and it should be the first child.
 #[derive(Component, Clone, Default)]
 struct ExpandedFieldEntry;
 
@@ -231,7 +231,7 @@ fn on_field_create(
     let (sidebar_entity, sidebar_children) = *sidebar;
     let (field_id, field_entity) = q_field.get(field_add.entity).unwrap();
 
-    // Spawn new field button
+    // Spawn new fields button
     let new_entry_entity = commands
         .spawn_scene(collapsed_field_entry_scene(field_entity, field_id.0))
         .id();

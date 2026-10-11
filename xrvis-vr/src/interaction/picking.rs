@@ -8,10 +8,10 @@ use bevy::picking::pointer::{
 };
 use bevy::prelude::*;
 use schminput::BoolActionValue;
-use sslgame::field::geometry::FieldGeometry;
-use sslgame::field::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowRobotHost};
-use sslgame::field::robots::Robot;
-use sslgame::field::{Field, Team};
+use sslgame::fields::robots::Robot;
+use sslgame::fields::{Field, Team};
+use sslgame::hosts::data::FieldGeometry;
+use sslgame::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowRobotHost};
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
 use sslgame::proto::remote::{RobotCommand, RobotMoveTarget, RobotRef, robot_command, ws_request};
 use std::ops::Range;
@@ -403,7 +403,7 @@ pub fn drive_field_dragging(
 
                 (hit, *robot_id, robot_team)
             } else {
-                // Start a drag if any pointer hits a robot on this field.
+                // Start a drag if any pointer hits a robot on this fields.
                 let Some((hit, pointer_id)) = xr_pointers
                     .iter()
                     .filter(|(p, _)| p.trigger_pressed)

@@ -1,6 +1,5 @@
-use crate::field::Team;
-use crate::field::game_state::GameState;
-use crate::field::geometry::FieldGeometry;
+use crate::fields::Team;
+use crate::hosts::data::{FieldGeometry, GameState};
 use crate::panels::{SpatialPanelScaling, SpatialPanelSpawner};
 use bevy::color::palettes::tailwind::*;
 use bevy::prelude::*;
@@ -20,7 +19,7 @@ pub fn game_state_panel_plugin(app: &mut App) {
 #[derive(Component, Clone, Debug, Default)]
 struct FieldSidePanelAnchor;
 
-/// Spawns score and team panels next to every field
+/// Spawns score and team panels next to every fields
 #[allow(clippy::type_complexity)]
 fn manage_game_state_panels(
     mut commands: Commands,

@@ -4,19 +4,20 @@ pub mod proto {
     }
 }
 mod depth_mask_material;
-pub mod field;
+pub mod fields;
+pub mod hosts;
 mod mesh_gen;
 mod network_tasks;
 pub mod panels;
 mod transform_filter;
 
-use crate::field::Field;
-use crate::field::robots::{Ball, Robot};
-use crate::field::visualizations::VisualizationInstance;
+use crate::fields::Field;
+use crate::fields::robots::{Ball, Robot};
 use bevy::prelude::*;
+use hosts::visualizations::VisualizationInstance;
 
 pub fn ssl_game_plugin(app: &mut App) {
-    app.add_plugins(field::field_plugin);
+    app.add_plugins((fields::field_plugin, hosts::host_plugin));
 
     app.insert_resource(RenderSettings {
         field: true,

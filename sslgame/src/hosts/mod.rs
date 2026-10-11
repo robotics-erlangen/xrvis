@@ -1,7 +1,10 @@
-use crate::field::game_state::GameState;
-use crate::field::geometry::FieldGeometry;
-use crate::field::robots::update_world_state;
-use crate::field::visualizations::{update_visualization_names, update_visualizations};
+pub mod data;
+pub mod discovery;
+pub mod visualizations;
+
+use crate::fields::robots::update_world_state;
+use crate::hosts::data::{FieldGeometry, GameState};
+use crate::hosts::visualizations::{update_visualization_names, update_visualizations};
 use crate::network_tasks;
 use crate::network_tasks::UpdatePacket;
 use crate::proto::remote::udp_stream_request::UdpStream;
@@ -13,12 +16,17 @@ use bevy::tasks::{IoTaskPool, Task};
 use std::net::SocketAddr;
 use std::time::Instant;
 
+/// Named system set in [PreUpdate] to allow scheduling other systems directly after new host data is received.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UpdateHostDataSystemSet;
 
 /// The core plugin for handling network traffic from hosts.
-/// It receives incoming pakets from active [HostConnection]s and encodes them into the ecs.
+/// It does automatic host discovery, and receives incoming pakets
+/// from active [HostConnection]s and encodes them into the ecs.
 pub fn host_plugin(app: &mut App) {
+    app.add_plugins(discovery::discovery_plugin);
+    app.add_plugins(visualizations::vis_plugin);
+
     app.add_systems(
         PreUpdate,
         receive_host_packets.in_set(UpdateHostDataSystemSet),
@@ -27,7 +35,7 @@ pub fn host_plugin(app: &mut App) {
 
 /// Representation of a discovered host. Note that this component alone does not mean that
 /// the host is connected, just that it was found in discovery: Use [start_connection](Self::start_connection)
-/// to actually establish the connection and start tracking its field state.
+/// to actually establish the connection and start tracking its fields state.
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Host {
     pub websocket_addr: SocketAddr,
@@ -98,6 +106,7 @@ impl std::fmt::Display for Host {
 /// Handle to the IO task for an actively connected host. Create using [Host::start_connection], then insert
 /// it into the Host's entity to start updating related fields ([GeometryHost], [YellowRobotHost], ...).
 #[derive(Component, Debug)]
+#[require(GameState, FieldGeometry)]
 pub struct HostConnection {
     pub sender: Sender<ws_request::Content>,
     receiver: Receiver<(UpdatePacket, Instant)>,
@@ -106,10 +115,10 @@ pub struct HostConnection {
 
 // ======== Relationships ========
 
-// These relationships dictate where each field is getting its data from and use
+// These relationships dictate where each fields is getting its data from and use
 // linked spawn to automatically despawn related fields when the host is dropped.
 
-/// Can be added to a [Field](crate::field::Field) to receive a 3d model based on the [FieldGeometry] of that host.
+/// Can be added to a [Field](crate::fields::Field) to receive a 3d model based on the [FieldGeometry] of that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = GeometryFields)]
 pub struct GeometryHost(pub Entity);
@@ -117,7 +126,7 @@ pub struct GeometryHost(pub Entity);
 #[relationship_target(relationship = GeometryHost, linked_spawn)]
 pub struct GeometryFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::field::Field) to receive [GameState] from that host.
+/// Can be added to a [Field](crate::fields::Field) to receive [GameState] from that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = GameStateFields)]
 pub struct GameStateHost(pub Entity);
@@ -125,7 +134,7 @@ pub struct GameStateHost(pub Entity);
 #[relationship_target(relationship = GameStateHost, linked_spawn)]
 pub struct GameStateFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::field::Field) to receive a [Ball](crate::field::robots::Ball) child entity, taking its position from that host.
+/// Can be added to a [Field](crate::fields::Field) to receive a [Ball](crate::fields::robots::Ball) child entity, taking its position from that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = BallFields)]
 pub struct BallHost(pub Entity);
@@ -133,7 +142,7 @@ pub struct BallHost(pub Entity);
 #[relationship_target(relationship = BallHost, linked_spawn)]
 pub struct BallFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::field::Field) to receive [Robot](crate::field::robots::Robot) child entities for all
+/// Can be added to a [Field](crate::fields::Field) to receive [Robot](crate::fields::robots::Robot) child entities for all
 /// yellow robots from that host. Their rendering can be configured using [RenderSettings](crate::RenderSettings).
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = YellowRobotFields)]
@@ -142,7 +151,7 @@ pub struct YellowRobotHost(pub Entity);
 #[relationship_target(relationship = YellowRobotHost, linked_spawn)]
 pub struct YellowRobotFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::field::Field) to receive [Robot](crate::field::robots::Robot) child entities for all
+/// Can be added to a [Field](crate::fields::Field) to receive [Robot](crate::fields::robots::Robot) child entities for all
 /// blue robots from that host. Their rendering can be configured using [RenderSettings](crate::RenderSettings).
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = BlueRobotFields)]
@@ -179,7 +188,7 @@ fn receive_host_packets(
                         geom.set_if_neq(FieldGeometry::from(new_geom));
                     } else {
                         warn!(
-                            "Discarding geometry update from host {host} because it has no FieldGeometry component. Did you forget to add the field_geometry_plugin?"
+                            "Discarding geometry update from host {host} because it has no FieldGeometry component. It should have been automatically added with the HostConnection."
                         );
                     }
                 }
@@ -188,7 +197,7 @@ fn receive_host_packets(
                         game_state.set_if_neq(GameState(new_game_state));
                     } else {
                         warn!(
-                            "Discarding game state update from host {host} because it has no GameState component. Did you forget to add the game_state_plugin?"
+                            "Discarding game state update from host {host} because it has no GameState component. It should have been automatically added with the HostConnection."
                         );
                     }
                 }
@@ -200,7 +209,7 @@ fn receive_host_packets(
                 }
                 UpdatePacket::WorldState(new_world_state) => {
                     // TODO: Currently the world state is the only thing that is directly written to the fields.
-                    // All other data has a separate system for transferring host -> field, so this feels inconsistent.
+                    // All other data has a separate system for transferring host -> fields, so this feels inconsistent.
                     commands.run_system_cached_with(
                         update_world_state,
                         (host_entity, new_world_state, rx_time),

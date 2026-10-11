@@ -12,11 +12,11 @@ use bevy::scene::SceneFunction;
 use bevy::ui::Checked;
 use bevy::ui_widgets::ValueChange;
 use derive_more::IntoIterator;
-use sslgame::field::hosts::{BlueRobotHost, HostConnection, YellowRobotHost};
-use sslgame::field::visualizations::{
+use sslgame::hosts::visualizations::{
     InactiveVisualization, VisualizationId, VisualizationInstance, VisualizationName,
     VisualizationSourceId, VisualizationSourceName, VisualizationUsages,
 };
+use sslgame::hosts::{BlueRobotHost, HostConnection, YellowRobotHost};
 
 pub fn vis_inspector_plugin(app: &mut App) {
     app.add_observer(on_new_vis_source);
@@ -33,7 +33,7 @@ pub fn scene(field_entity: Entity) -> impl Scene {
     }
 }
 
-/// References the field that this inspector interacts with. Should always be used in [bsn!], so the [VisInspectorTemplate] can initialize the UI.
+/// References the fields that this inspector interacts with. Should always be used in [bsn!], so the [VisInspectorTemplate] can initialize the UI.
 #[derive(Component, Clone, Copy)]
 #[relationship(relationship_target = FieldVisInspectedBy)]
 struct VisInspector(Entity);
@@ -41,7 +41,7 @@ struct VisInspector(Entity);
 #[relationship_target(relationship = VisInspector, linked_spawn)]
 struct FieldVisInspectedBy(Entity);
 
-/// Custom template for [VisInspector] that creates the initial UI using the current state of the referenced field.
+/// Custom template for [VisInspector] that creates the initial UI using the current state of the referenced fields.
 #[derive(Default)]
 struct VisInspectorTemplate {
     field_entity: EntityTemplate,

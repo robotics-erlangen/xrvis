@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use derive_more::IntoIterator;
 use lucide_icons::Icon;
-use sslgame::field::Field;
-use sslgame::field::hosts::{
+use sslgame::fields::Field;
+use sslgame::hosts::{
     BallHost, BlueRobotHost, GameStateHost, GeometryFields, GeometryHost, Host, HostConnection,
     YellowRobotHost,
 };

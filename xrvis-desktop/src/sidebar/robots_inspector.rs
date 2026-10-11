@@ -4,8 +4,8 @@ use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers;
 use bevy::feathers::theme::ThemeBackgroundColor;
 use bevy::prelude::*;
-use sslgame::field::Team;
-use sslgame::field::robots::Robot;
+use sslgame::fields::Team;
+use sslgame::fields::robots::Robot;
 
 pub fn robots_inspector_plugin(app: &mut App) {
     app.add_observer(on_robot_add);

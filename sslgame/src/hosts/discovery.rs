@@ -1,4 +1,4 @@
-use crate::field::hosts::Host;
+use crate::hosts::Host;
 use crate::network_tasks::host_discovery_task;
 use crate::proto::remote::HostAdvertisement;
 use async_channel::{Receiver, Sender};

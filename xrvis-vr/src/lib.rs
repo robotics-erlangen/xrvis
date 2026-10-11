@@ -10,12 +10,12 @@ use bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin;
 use bevy_mod_openxr::init::OxrInitPlugin;
 use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::{AppInfo, EnvironmentBlendMode, Version};
-use sslgame::field::Field;
-use sslgame::field::hosts::{
-    BallHost, BlueRobotHost, GameStateHost, GeometryHost, Host, HostConnection, YellowRobotHost,
-};
-use sslgame::field::visualizations::{
+use sslgame::fields::Field;
+use sslgame::hosts::visualizations::{
     AllHostVisualizations, VisualizationInstance, VisualizationName, VisualizationUsages,
+};
+use sslgame::hosts::{
+    BallHost, BlueRobotHost, GameStateHost, GeometryHost, Host, HostConnection, YellowRobotHost,
 };
 use sslgame::ssl_game_plugin;
 
@@ -110,7 +110,7 @@ fn spawn_new_hosts(
     if let Some((host, host_conn, host_entity)) = q_available_hosts.iter().next()
         && q_spawned_field.is_none()
     {
-        // Spawn a new field if there isn't one currently spawned
+        // Spawn a new fields if there isn't one currently spawned
         if host_conn.is_none() {
             commands.entity(host_entity).insert(host.start_connection());
         }
