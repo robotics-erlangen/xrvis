@@ -1,6 +1,6 @@
 use crate::icons::icon;
 use crate::sidebar::{FieldId, inspector_base_scene};
-use crate::ui::tokens;
+use crate::ui::{regular_text, tokens};
 use bevy::ecs::template::TemplateContext;
 use bevy::feathers::controls::{ButtonVariant, FeathersButton};
 use bevy::feathers::theme::{ThemeBackgroundColor, ThemedText};
@@ -210,7 +210,7 @@ fn conn_indicator_spawned_patch(spawned_as: Option<u8>) -> impl Scene {
                 justify_content: JustifyContent::Center,
             }
             Children [
-                Text({field_id.to_string()}) TextFont {font_size: px(12)}
+                @regular_text(field_id.to_string(), px(12))
             ]
         }) as Box<dyn Scene>
     } else {

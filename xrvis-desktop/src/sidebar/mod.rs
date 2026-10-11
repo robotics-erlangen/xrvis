@@ -123,7 +123,7 @@ fn collapsed_field_entry_scene(field_entity: Entity, field_id: u8) -> impl Scene
         #CollapsedFieldEntry
         SidebarEntryRepresents(field_entity)
         @FeathersButton {
-            @caption: bsn! { @regular_text(field_id.to_string()) TextFont { font_size: px(20) } },
+            @caption: bsn! { @regular_text(field_id.to_string(), px(20)) },
             @variant: ButtonVariant::Normal,
         }
         Node {
@@ -208,7 +208,7 @@ fn expanded_field_entry_scene(
             }
             ThemeBackgroundColor(tokens::SIDEBAR_EXPANDED_FIELD_BUTTON)
             on(on_expanded_click)
-            Children [ @regular_text(field_id.to_string()) TextFont { font_size: px(20) } TextOfComponent(#ExpandedFieldEntry) ]
+            Children [ @regular_text(field_id.to_string(), px(20)) TextOfComponent(#ExpandedFieldEntry) ]
             --
             Node {
                 flex_direction: FlexDirection::Column,

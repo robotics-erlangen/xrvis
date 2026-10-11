@@ -400,7 +400,7 @@ fn source_ui_scene(
             Children [
                 @FeathersDisclosureToggle Checked on(on_disclosure_click)
                 --
-                @regular_text(label) TextFont { font_size: px(14) } Node {padding: UiRect::top(px(3))} TextOfComponent(#Root)
+                @regular_text(label, px(14))  Node {padding: UiRect::top(px(3))} TextOfComponent(#Root)
             ]
             --
             @FeathersListView {

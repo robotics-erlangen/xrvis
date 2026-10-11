@@ -26,11 +26,11 @@ struct RobotsInspector(Entity);
 struct FieldRobotsInspectedBy(Entity);
 
 #[derive(Component, FromTemplate, Clone, Copy)]
-#[relationship(relationship_target = RobotOfCard)]
-struct CardForRobot(Entity);
+#[relationship(relationship_target = RobotOfInspectorEntry)]
+struct InspectorEntryForRobot(Entity);
 #[derive(Component, Clone, Copy)]
-#[relationship_target(relationship = CardForRobot, linked_spawn)]
-struct RobotOfCard(Entity);
+#[relationship_target(relationship = InspectorEntryForRobot, linked_spawn)]
+struct RobotOfInspectorEntry(Entity);
 
 #[derive(Default)]
 struct RobotsInspectorTemplate {
@@ -90,10 +90,10 @@ impl Template for RobotsInspectorTemplate {
                     }
                     ThemeBackgroundColor(higher_col)
                     Children [
-                        @regular_text(text) TextFont { font_size: px(14) }
+                        @regular_text(text, px(14))
                     ]
                     --
-                    @regular_text(robot_count.to_string()) TextFont { font_size: px(14) }
+                    @regular_text(robot_count.to_string(), px(14))
                 ]
             }
         }
@@ -104,24 +104,21 @@ impl Template for RobotsInspectorTemplate {
                 .filter(|(_, robot_team, _)| *robot_team == team)
                 .collect::<Vec<_>>();
             robots.sort_by_key(|(robot, _, _)| robot.0);
-            let robot_cards = robots
+            let robot_entries = robots
                 .into_iter()
-                .map(|(robot, _, entity)| robot_card(team, robot.0, *entity))
+                .map(|(robot, _, entity)| robot_entry_scene(robot.0, *entity))
                 .collect::<Vec<_>>();
-            let robot_count = robot_cards.len();
+            let robot_count = robot_entries.len();
             (
                 bsn! {
                     Node {
-                        display: Display::Grid,
+                        flex_direction: FlexDirection::Column,
                         width: percent(100),
                         flex_grow: 1.0,
                         row_gap: px(6),
-                        column_gap: px(6),
                         padding: UiRect::horizontal(px(6)),
-                        grid_template_rows: {vec![RepeatedGridTrack::px(GridTrackRepetition::AutoFill, 80.0)]},
-                        grid_template_columns: {vec![RepeatedGridTrack::flex(3, 1.0)]},
                     }
-                    Children [{robot_cards}]
+                    Children [{robot_entries}]
                 },
                 robot_count,
             )
@@ -159,21 +156,22 @@ impl Template for RobotsInspectorTemplate {
     }
 }
 
-fn robot_card(team: Team, robot_id: u8, robot_entity: Entity) -> impl Scene {
+fn robot_entry_scene(robot_id: u8, robot_entity: Entity) -> impl Scene {
     bsn! {
-        #RobotCardRoot
-        CardForRobot(robot_entity)
+        #RobotEntryRoot
+        InspectorEntryForRobot(robot_entity)
         Node {
             width: percent(100),
-            height: percent(100),
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::Center,
+            padding: UiRect::axes(px(6), px(3)),
             align_items: AlignItems::Center,
             border_radius: px(4),
+            column_gap: px(6),
         }
         ThemeBackgroundColor(feathers::tokens::BUTTON_BG)
         Children [
-            TextOfComponent(#RobotCardRoot) @regular_text(format!("Robot {}", robot_id))
+            TextOfComponent(#RobotEntryRoot) @regular_text(robot_id.to_string(), px(16))
+            --
+            Node {flex_grow: 1.0}
         ]
     }
 }
@@ -195,12 +193,12 @@ fn on_robot_add(
             Team::Blue => inspector_children[3],
         }
     {
-        let card_entity = commands
-            .spawn_scene(robot_card(*team, robot_id.0, robot_entity))
+        let entry_entity = commands
+            .spawn_scene(robot_entry_scene(robot_id.0, robot_entity))
             .id();
         commands
             .entity(grid_entity)
-            .queue(insert_child_sorted(card_entity));
+            .queue(insert_child_sorted(entry_entity));
     }
 }
 
@@ -248,7 +246,7 @@ fn insert_child_sorted(child: Entity) -> impl EntityCommand {
         let world = parent.world();
 
         let new_robot_id = world
-            .get::<CardForRobot>(child)
+            .get::<InspectorEntryForRobot>(child)
             .and_then(|robot_ref| world.get::<Robot>(robot_ref.0).map(|robot| robot.0))
             .unwrap_or(0);
 
@@ -259,7 +257,7 @@ fn insert_child_sorted(child: Entity) -> impl EntityCommand {
             .enumerate()
             .find_map(|(i, e)| {
                 let this_robot_id = world
-                    .get::<CardForRobot>(*e)
+                    .get::<InspectorEntryForRobot>(*e)
                     .and_then(|robot_ref| world.get::<Robot>(robot_ref.0).map(|robot| robot.0))
                     .unwrap_or(0);
                 (new_robot_id < this_robot_id).then_some(i)

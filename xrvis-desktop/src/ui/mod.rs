@@ -67,8 +67,8 @@ fn handle_immediate_activate(
     }
 }
 
-pub fn regular_text(text: impl Into<String>) -> impl Scene {
+pub fn regular_text(text: impl Into<String>, font_size: impl Into<FontSize>) -> impl Scene {
     bsn! {
-        Text({text.into()}) TextFont { font: FontSourceTemplate::Handle(fonts::REGULAR) }
+        Text({text.into()}) TextFont { font: FontSourceTemplate::Handle(fonts::REGULAR), font_size: font_size }
     }
 }
