@@ -2,6 +2,7 @@ use crate::interaction::input::{InputActions, LeftHandPointer, RightHandPointer}
 use bevy::app::App;
 use bevy::asset::uuid::Uuid;
 use bevy::camera::{NormalizedRenderTarget, RenderTarget};
+use bevy::ecs::system::SystemParam;
 use bevy::picking::PickingSystems;
 use bevy::picking::pointer::{
     Location, PointerAction, PointerId, PointerInput, PointerLocation, PointerPressState,
@@ -10,12 +11,12 @@ use bevy::prelude::*;
 use schminput::BoolActionValue;
 use sslgame::fields::robots::Robot;
 use sslgame::fields::{Field, Team};
+use sslgame::hosts::GeometryHost;
 use sslgame::hosts::data::FieldGeometry;
-use sslgame::hosts::{BlueRobotHost, GeometryHost, HostConnection, YellowRobotHost};
+use sslgame::hosts::robot_control::RobotCommands;
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
-use sslgame::proto::{RobotCommand, RobotMoveTarget, RobotRef, robot_command, ws_request};
+use sslgame::proto::{RobotCommand, RobotMoveTarget, RobotRef, robot_command};
 use std::ops::Range;
-use std::time::Instant;
 
 const LEFT_HAND_POINTER_ID: PointerId = PointerId::Custom(Uuid::from_u128(10101010));
 const RIGHT_HAND_POINTER_ID: PointerId = PointerId::Custom(Uuid::from_u128(20202020));
@@ -52,7 +53,8 @@ pub struct XrPointer {
 }
 
 pub struct XrSurfaceHit {
-    pos: Vec2,
+    pos_2d: Vec2,
+    pos_3d: Vec3,
     depth: f32,
     in_bounds: bool,
     in_range: bool,
@@ -83,7 +85,8 @@ impl XrPointer {
         let in_range = self.range.contains(&intersect_dist);
 
         Some(XrSurfaceHit {
-            pos: surface_hit,
+            pos_2d: surface_hit,
+            pos_3d: global_hit,
             depth: intersect_dist,
             in_bounds,
             in_range,
@@ -183,7 +186,7 @@ pub fn drive_ui_pointers(
             ) else {
                 continue;
             };
-            let normalized_surface_hit = surface_hit.pos / panel_transform.scale().xy();
+            let normalized_surface_hit = surface_hit.pos_2d / panel_transform.scale().xy();
             // Get logical pixel position on the render target texture (top-left origin, y-down)
             // The manual scaling is necessary because only the global UiScale is handled automatically, but the panels use the individual render target scale instead.
             let pointer_pos =
@@ -236,8 +239,8 @@ pub fn drive_ui_pointers(
             continue;
         };
 
-        // Sending a cancel event when moving to a different panel is not necessary because
-        // dragging locks the cursor to one panel and hover state works across panels
+        // Sending a cancel event when moving directly to a different panel is not necessary
+        // because dragging locks the cursor to one panel and hover state works across panels
 
         // Draw hit marker
         gizmos.sphere(
@@ -288,182 +291,140 @@ pub fn drive_ui_pointers(
 
 // ========= Robot dragging / Field picking ========
 
-/// Pointer, robot id, robot team, last move command send
 #[derive(Component, Debug)]
-pub struct FieldDragAction(PointerId, u8, Team, Instant);
+#[relationship_target(relationship = DraggingRobot)]
+pub struct RobotDraggedBy(Entity);
 
-fn field_intersection(
-    pointer: &XrPointer,
-    field_transform: &GlobalTransform,
-    bounds: Vec2,
-) -> Option<XrSurfaceHit> {
-    let hit = pointer.intersect_plane(
-        field_transform.translation(),
-        field_transform.up(),
-        field_transform.right(),
-        field_transform.forward(),
-        bounds,
-    )?;
+#[derive(Component, Debug)]
+#[relationship(relationship_target = RobotDraggedBy)]
+pub struct DraggingRobot(Entity);
 
-    if hit.in_bounds && hit.in_range {
-        Some(hit)
-    } else {
-        None
+#[derive(SystemParam)]
+struct FieldRaycaster<'w, 's> {
+    q_fields: Query<'w, 's, (&'static GeometryHost, &'static GlobalTransform, Entity), With<Field>>,
+    q_geometry_hosts: Query<'w, 's, &'static FieldGeometry>,
+}
+
+impl<'w, 's> FieldRaycaster<'w, 's> {
+    fn intersect(&self, field_entity: Entity, pointer: &XrPointer) -> Option<XrSurfaceHit> {
+        let (geom_host_ref, field_transform, _) = self.q_fields.get(field_entity).ok()?;
+        let geometry = self.q_geometry_hosts.get(geom_host_ref.0).ok()?;
+
+        pointer.intersect_plane(
+            field_transform.translation(),
+            field_transform.up(),
+            field_transform.right(),
+            field_transform.forward(),
+            geometry.play_area_size + geometry.boundary_width * 2.0,
+        )
+    }
+
+    fn intersect_first(&self, pointer: &XrPointer) -> Option<(Entity, XrSurfaceHit)> {
+        self.q_fields
+            .iter()
+            .filter_map(|(_, _, field_entity)| {
+                self.intersect(field_entity, pointer)
+                    .map(|hit| (field_entity, hit))
+            })
+            .filter(|(_, hit)| hit.in_bounds && hit.in_range)
+            .min_by(|(_, hit1), (_, hit2)| hit1.depth.partial_cmp(&hit2.depth).unwrap())
     }
 }
 
-fn find_hit_robot(
-    robots: &Query<(&Robot, &Team, &Transform, &ChildOf)>,
-    field_entity: Entity,
-    hit_pos: Vec2,
-) -> Option<(u8, Team)> {
-    robots
-        .iter()
-        .find(|(_, _, robot_transform, ChildOf(robot_parent))| {
-            if *robot_parent != field_entity {
-                return false;
-            }
-            (robot_transform.translation.xz() * Vec2::new(1., -1.)).distance_squared(hit_pos)
-                < 0.1 * 0.1
-        })
-        .map(|(robot, team, _, _)| (robot.0, *team))
-}
-
 #[allow(clippy::type_complexity)]
-pub fn drive_field_dragging(
+fn drive_field_dragging(
     mut gizmos: Gizmos,
     mut commands: Commands,
-    xr_pointers: Query<(&XrPointer, &PointerId)>,
-    mut fields: Query<
-        (
-            &GeometryHost,
-            Option<&YellowRobotHost>,
-            Option<&BlueRobotHost>,
-            &GlobalTransform,
-            Option<&mut FieldDragAction>,
-            Entity,
-        ),
-        With<Field>,
-    >,
-    geometry_hosts: Query<&FieldGeometry>,
-    robot_hosts: Query<&HostConnection>,
-    robots: Query<(&Robot, &Team, &Transform, &ChildOf)>,
+    q_xr_pointers: Query<(&XrPointer, Option<&DraggingRobot>, Entity)>,
+    field_raycaster: FieldRaycaster,
+    mut robot_commands: RobotCommands,
+    q_robots: Query<(
+        &Robot,
+        &Team,
+        &Transform,
+        Option<&RobotDraggedBy>,
+        &ChildOf,
+        Entity,
+    )>,
 ) {
-    for (
-        field_geometry_ref,
-        yellow_robot_ref,
-        blue_robot_ref,
-        field_transform,
-        mut drag_action,
-        field_entity,
-    ) in fields.iter_mut()
-    {
-        let geometry = geometry_hosts.get(field_geometry_ref.0).unwrap();
-        let drag_bounds = geometry.play_area_size + geometry.boundary_width * 2.0;
+    for (pointer, dragged_robot_ref, pointer_entity) in q_xr_pointers {
+        let (field_entity, robot_ref, field_hit) = if let Some(dragged_robot_ref) =
+            dragged_robot_ref
+        {
+            let (robot_id, robot_team, _, _, field_ref, _) =
+                q_robots.get(dragged_robot_ref.0).unwrap();
 
-        let (pointer_hit, dragging_robot_id, &mut dragging_robot_team) =
-            if let Some(FieldDragAction(pointer_id, robot_id, robot_team, _last_send)) =
-                drag_action.as_deref_mut()
+            if let Some(field_hit) = field_raycaster.intersect(field_ref.0, pointer)
+                && pointer.trigger_pressed
+                && field_hit.in_range
             {
-                // Continue active drag with the same pointer.
-                let hit = xr_pointers
-                    .iter()
-                    .filter(|(p, _)| p.trigger_pressed)
-                    .find(|(_, id)| **id == *pointer_id)
-                    .and_then(|(pointer, _)| {
-                        field_intersection(pointer, field_transform, drag_bounds).inspect(|hit| {
-                            gizmos.sphere(pointer.ray.get_point(hit.depth), 0.01, Color::WHITE);
-                        })
-                    });
+                gizmos.sphere(field_hit.pos_3d, 0.01, Color::WHITE);
 
-                let Some(hit) = hit else {
-                    let host_conn = match (*robot_team, yellow_robot_ref, blue_robot_ref) {
-                        (Team::Yellow, Some(h), _) => robot_hosts.get(h.0).ok(),
-                        (Team::Blue, _, Some(h)) => robot_hosts.get(h.0).ok(),
-                        _ => None,
-                    };
-
-                    if let Some(host_conn) = host_conn {
-                        host_conn
-                            .sender
-                            .send_blocking(ws_request::Content::ControlRobot(RobotCommand {
-                                robot: RobotRef {
-                                    robot_id: *robot_id as u32,
-                                    is_blue: Some(*robot_team == Team::Blue),
-                                },
-                                hold_ball: None,
-                                move_target: None,
-                                kick_command: None,
-                            }))
-                            .unwrap();
-                    }
-                    commands.entity(field_entity).remove::<FieldDragAction>();
-                    continue;
-                };
-
-                (hit, *robot_id, robot_team)
+                (
+                    field_ref.0,
+                    RobotRef {
+                        robot_id: robot_id.0 as u32,
+                        is_blue: Some(*robot_team == Team::Blue),
+                    },
+                    field_hit,
+                )
             } else {
-                // Start a drag if any pointer hits a robot on this fields.
-                let Some((hit, pointer_id)) = xr_pointers
-                    .iter()
-                    .filter(|(p, _)| p.trigger_pressed)
-                    .find_map(|(pointer, pointer_id)| {
-                        field_intersection(pointer, field_transform, drag_bounds)
-                            .map(|hit| (hit, *pointer_id))
-                            .inspect(|hit| {
-                                gizmos.sphere(
-                                    pointer.ray.get_point(hit.0.depth),
-                                    0.01,
-                                    Color::WHITE,
-                                );
-                            })
-                    })
-                else {
-                    continue;
-                };
+                commands.entity(pointer_entity).remove::<DraggingRobot>();
+                continue;
+            }
+        } else if let Some((field_entity, field_hit)) = field_raycaster.intersect_first(pointer) {
+            gizmos.sphere(field_hit.pos_3d, 0.01, Color::WHITE);
 
-                let Some((robot_id, robot_team)) = find_hit_robot(&robots, field_entity, hit.pos)
-                else {
-                    continue;
-                };
+            if !pointer.trigger_pressed {
+                continue;
+            }
 
-                commands.entity(field_entity).insert(FieldDragAction(
-                    pointer_id,
-                    robot_id,
-                    robot_team,
-                    Instant::now(),
-                ));
+            // Pointing at a free robot?
+            let Some((robot_id, robot_team, robot_entity)) = q_robots
+                .iter()
+                .find(
+                    |(_, _, robot_transform, dragged, ChildOf(robot_parent), _)| {
+                        if *robot_parent != field_entity || dragged.is_some() {
+                            return false;
+                        }
+                        (robot_transform.translation.xz() * Vec2::new(1., -1.))
+                            .distance_squared(field_hit.pos_2d)
+                            < 0.1 * 0.1
+                    },
+                )
+                .map(|(robot, team, _, _, _, entity)| (*robot, *team, entity))
+            else {
                 continue;
             };
 
-        if let Some(FieldDragAction(_, _, robot_team, last_send)) = drag_action.as_deref_mut()
-            && last_send.elapsed() > std::time::Duration::from_millis(30)
-        {
-            let host_conn = match (*robot_team, yellow_robot_ref, blue_robot_ref) {
-                (Team::Yellow, Some(h), _) => robot_hosts.get(h.0).ok(),
-                (Team::Blue, _, Some(h)) => robot_hosts.get(h.0).ok(),
-                _ => None,
-            };
+            commands
+                .entity(pointer_entity)
+                .insert(DraggingRobot(robot_entity));
 
-            if let Some(host_conn) = host_conn {
-                host_conn
-                    .sender
-                    .send_blocking(ws_request::Content::ControlRobot(RobotCommand {
-                        robot: RobotRef {
-                            robot_id: dragging_robot_id as u32,
-                            is_blue: Some(dragging_robot_team == Team::Blue),
-                        },
-                        hold_ball: None,
-                        move_target: Some(robot_command::MoveTarget::WorldPos(RobotMoveTarget {
-                            x: Some(pointer_hit.pos.x),
-                            y: Some(pointer_hit.pos.y),
-                            phi: None,
-                        })),
-                        kick_command: None,
-                    }))
-                    .unwrap();
-            }
-            *last_send = Instant::now();
-        }
+            (
+                field_entity,
+                RobotRef {
+                    robot_id: robot_id.0 as u32,
+                    is_blue: Some(robot_team == Team::Blue),
+                },
+                field_hit,
+            )
+        } else {
+            continue;
+        };
+
+        robot_commands.submit(
+            field_entity,
+            RobotCommand {
+                robot: robot_ref,
+                hold_ball: None,
+                move_target: Some(robot_command::MoveTarget::WorldPos(RobotMoveTarget {
+                    x: Some(field_hit.pos_2d.x),
+                    y: Some(field_hit.pos_2d.y),
+                    phi: None,
+                })),
+                kick_command: None,
+            },
+        );
     }
 }

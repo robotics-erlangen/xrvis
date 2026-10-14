@@ -14,6 +14,7 @@ use std::time::Instant;
 
 pub mod data;
 pub mod discovery;
+pub mod robot_control;
 pub mod visualizations;
 
 /// Named system set in [PreUpdate] to allow scheduling other systems directly after new host data is received.
@@ -25,6 +26,7 @@ pub struct UpdateHostDataSystemSet;
 /// from active [HostConnection]s and encodes them into the ecs.
 pub fn host_plugin(app: &mut App) {
     app.add_plugins(discovery::discovery_plugin);
+    app.add_plugins(robot_control::robot_control_plugin);
     app.add_plugins(visualizations::vis_plugin);
 
     app.add_systems(
