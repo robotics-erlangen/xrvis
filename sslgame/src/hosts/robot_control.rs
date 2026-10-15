@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 /// Adds the [RobotCommandProcessor] to hosts to safely send robot commands and handles
 /// the [RobotControlledByKeyboard] and [RobotControlledByGamepad] components.
 pub fn robot_control_plugin(app: &mut App) {
+    app.add_observer(on_gamepad_removed);
     app.add_systems(
         Update,
         (
@@ -156,6 +157,15 @@ pub struct RobotControlledByGamepad(pub Entity);
 #[derive(Component)]
 #[relationship_target(relationship = RobotControlledByGamepad)]
 pub struct GamepadControlsRobots(Vec<Entity>);
+
+/// Gamepad disconnects only remove the [Gamepad] component, but leave its entity intact to remember
+/// [GamepadSettings] across reconnections (see [gamepad_connection_system](bevy::input::gamepad::gamepad_connection_system)).
+/// This removes the [RobotControlledByGamepad] relationship from the gamepad to free the controlled robots.
+fn on_gamepad_removed(event: On<Remove<Gamepad>>, mut commands: Commands) {
+    commands
+        .entity(event.entity)
+        .remove::<GamepadControlsRobots>();
+}
 
 /// Helper [SystemParam] for sending robot commands from a field.
 /// Automatically handles the "field -> team robot host" lookup.

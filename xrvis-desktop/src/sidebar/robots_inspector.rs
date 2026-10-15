@@ -1,15 +1,27 @@
+use crate::icons::icon;
 use crate::sidebar::inspector_base_scene;
-use crate::ui::{TextOfComponent, regular_text, tokens};
+use crate::ui::{ComponentText, TextOfComponent, regular_text, tokens};
 use bevy::ecs::template::{EntityTemplate, TemplateContext};
 use bevy::feathers;
+use bevy::feathers::controls::{
+    FeathersMenu, FeathersMenuButton, FeathersMenuItem, FeathersMenuPopup,
+};
 use bevy::feathers::theme::ThemeBackgroundColor;
 use bevy::prelude::*;
+use bevy::ui_widgets::{Activate, MenuAction, MenuEvent};
 use sslgame::fields::Team;
 use sslgame::fields::robots::Robot;
+use sslgame::hosts::robot_control::{RobotControlledByGamepad, RobotControlledByKeyboard};
 
 pub fn robots_inspector_plugin(app: &mut App) {
     app.add_observer(on_robot_add);
-    app.add_systems(PostUpdate, update_header_robot_count);
+    app.add_systems(
+        PostUpdate,
+        (
+            update_header_robot_count,
+            (update_control_gamepad_options, update_control_selection).chain(),
+        ),
+    );
 }
 
 pub fn scene(field_entity: Entity) -> impl Scene {
@@ -162,7 +174,7 @@ fn robot_entry_scene(robot_id: u8, robot_entity: Entity) -> impl Scene {
         InspectorEntryForRobot(robot_entity)
         Node {
             width: percent(100),
-            padding: UiRect::axes(px(6), px(3)),
+            padding: {UiRect::all(px(3)).with_left(px(6))},
             align_items: AlignItems::Center,
             border_radius: px(4),
             column_gap: px(6),
@@ -172,6 +184,8 @@ fn robot_entry_scene(robot_id: u8, robot_entity: Entity) -> impl Scene {
             TextOfComponent(#RobotEntryRoot) @regular_text(robot_id.to_string(), px(16))
             --
             Node {flex_grow: 1.0}
+            --
+            @control_selector_scene(robot_entity)
         ]
     }
 }
@@ -270,5 +284,211 @@ fn insert_child_sorted(child: Entity) -> impl EntityCommand {
         }
 
         Ok(())
+    }
+}
+
+// ======== Control selector dropdown ========
+
+#[derive(Component, FromTemplate, Clone, Copy)]
+struct RobotControlButtonIcon(Entity);
+
+#[derive(Component, FromTemplate, Clone, Copy)]
+struct RobotControlPopup(Entity);
+
+#[derive(Component, FromTemplate, Clone, Copy)]
+struct RobotControlPopupOption {
+    robot: Entity,
+    source: RobotControlSource,
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+enum RobotControlSource {
+    #[default]
+    Ai,
+    Keyboard,
+    Gamepad(Entity),
+}
+
+impl RobotControlSource {
+    fn icon(self) -> lucide_icons::Icon {
+        match self {
+            Self::Ai => lucide_icons::Icon::BrainCircuit,
+            Self::Keyboard => lucide_icons::Icon::Keyboard,
+            Self::Gamepad(_) => lucide_icons::Icon::Gamepad2,
+        }
+    }
+}
+
+/// A button and dropdown that switches the control source of a robot.
+fn control_selector_scene(robot_entity: Entity) -> impl Scene {
+    bsn! {
+        @FeathersMenu
+            Children [
+                @FeathersMenuButton {
+                    @caption: bsn! {
+                        @icon(lucide_icons::Icon::BrainCircuit, px(16))
+                        RobotControlButtonIcon(robot_entity)
+                    },
+                }
+                Node {
+                    height: percent(100),
+                    padding: {UiRect::all(px(3))},
+                }
+                --
+                @FeathersMenuPopup
+                RobotControlPopup(robot_entity)
+                Children [
+                    @control_option_scene(robot_entity, RobotControlSource::Ai, "AI")
+                    --
+                    @control_option_scene(robot_entity, RobotControlSource::Keyboard, "Keyboard")
+                ]
+            ]
+    }
+}
+
+/// One entry in the control selector dropdown.
+fn control_option_scene(
+    robot: Entity,
+    source: RobotControlSource,
+    label: impl Into<String>,
+) -> impl Scene {
+    bsn! {
+        #OptionRoot
+        @FeathersMenuItem {
+            @caption: bsn_list! {
+                @icon(source.icon(), px(16))
+                --
+                @regular_text(label, px(14)) TextOfComponent(#OptionRoot)
+                --
+                @icon(lucide_icons::Icon::Check, px(14))
+                Visibility::Hidden
+            },
+        }
+        Node { column_gap: px(6) }
+        RobotControlPopupOption { robot, source }
+        on(on_control_option_activate)
+    }
+}
+
+/// Changes the control source of a robot when its option is clicked.
+fn on_control_option_activate(
+    event: On<Activate>,
+    q_options: Query<&RobotControlPopupOption>,
+    mut commands: Commands,
+) {
+    let Ok(&RobotControlPopupOption { robot, source }) = q_options.get(event.entity) else {
+        return;
+    };
+
+    commands
+        .entity(robot)
+        .remove::<(RobotControlledByKeyboard, RobotControlledByGamepad)>();
+    match source {
+        RobotControlSource::Ai => {}
+        RobotControlSource::Keyboard => {
+            commands.entity(robot).insert(RobotControlledByKeyboard);
+        }
+        RobotControlSource::Gamepad(gamepad) => {
+            commands
+                .entity(robot)
+                .insert(RobotControlledByGamepad(gamepad));
+        }
+    }
+
+    commands.trigger(MenuEvent {
+        source: event.entity,
+        action: MenuAction::CloseAll,
+    });
+    commands.trigger(MenuEvent {
+        source: event.entity,
+        action: MenuAction::FocusRoot,
+    });
+}
+
+/// Updates the options in the popup to react to gamepad changes.
+fn update_control_gamepad_options(
+    q_gamepads: Query<(Entity, Option<&Name>), With<Gamepad>>,
+    q_popups: Query<(Entity, &RobotControlPopup, &Children)>,
+    q_options: Query<(Entity, &RobotControlPopupOption, &ComponentText)>,
+    mut q_labels: Query<&mut Text>,
+    mut commands: Commands,
+) {
+    fn gamepad_label(entity: Entity, name: Option<&Name>) -> String {
+        format!("{} ({entity})", name.map_or("Gamepad", Name::as_str))
+    }
+
+    let mut current_gamepads = q_gamepads.iter().collect::<Vec<_>>();
+    current_gamepads.sort_by_key(|(entity, _)| entity.to_bits());
+
+    for (popup_entity, robot_ref, options) in &q_popups {
+        let mut current_gamepad_options = Vec::new();
+        for (option_entity, option, option_text_ref) in q_options.iter_many(options).matched() {
+            if let RobotControlSource::Gamepad(gamepad) = option.source {
+                // Remove the option if its gamepad was disconnected
+                let Ok((_, name)) = q_gamepads.get(gamepad) else {
+                    commands.entity(option_entity).try_despawn();
+                    continue;
+                };
+                current_gamepad_options.push(gamepad);
+                // Update label in the name changed
+                if let Ok(mut text) = q_labels.get_mut(*option_text_ref.collection()) {
+                    let label = gamepad_label(gamepad, name);
+                    text.set_if_neq(Text(label));
+                }
+            }
+        }
+        // Spawn options for new gamepads
+        for &(gamepad, name) in &current_gamepads {
+            if !current_gamepad_options.contains(&gamepad) {
+                commands
+                    .spawn_scene(control_option_scene(
+                        robot_ref.0,
+                        RobotControlSource::Gamepad(gamepad),
+                        gamepad_label(gamepad, name),
+                    ))
+                    .insert(ChildOf(popup_entity));
+            }
+        }
+    }
+}
+
+/// Updates the button and the dropdown options of the control selector whenever the control source of a robot changes.
+fn update_control_selection(
+    q_robots: Query<
+        (
+            Has<RobotControlledByKeyboard>,
+            Option<&RobotControlledByGamepad>,
+        ),
+        With<Robot>,
+    >,
+    mut q_icons: Query<(&RobotControlButtonIcon, &mut Text)>,
+    q_options: Query<(&RobotControlPopupOption, &Children)>,
+    mut q_visibility: Query<&mut Visibility>,
+) {
+    // Gets the current control source of a robot
+    let control_of_robot = |robot| match q_robots.get(robot) {
+        Ok((_, Some(gamepad))) => RobotControlSource::Gamepad(gamepad.0),
+        Ok((true, None)) => RobotControlSource::Keyboard,
+        _ => RobotControlSource::Ai,
+    };
+
+    // Update the button icon
+    for (robot, mut text) in &mut q_icons {
+        let icon_glyph = control_of_robot(robot.0).icon().unicode().to_string();
+        text.set_if_neq(Text(icon_glyph));
+    }
+
+    // Update the checkmark in the dropdown
+    for (option, children) in &q_options {
+        let visibility = if control_of_robot(option.robot) == option.source {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if let Some(check_entity) = children.last()
+            && let Ok(mut check_visibility) = q_visibility.get_mut(*check_entity)
+        {
+            check_visibility.set_if_neq(visibility);
+        }
     }
 }
