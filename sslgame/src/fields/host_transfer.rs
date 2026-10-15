@@ -53,16 +53,16 @@ fn transfer_field_geometry(
     render_settings: Res<RenderSettings>,
     white_material: Res<DefaultMaterial>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
-    mut q_fields: Query<(&GeometryHost, Option<&Mesh3d>, Entity), With<Field>>,
+    mut q_fields: Query<(&GeometryHost, Has<Mesh3d>, Entity), With<Field>>,
     q_hosts: Query<Ref<FieldGeometry>, (With<HostConnection>, Without<Field>)>,
 ) {
-    for (GeometryHost(host_entity), mesh_component, entity) in &mut q_fields {
+    for (GeometryHost(host_entity), has_mesh, entity) in &mut q_fields {
         let Ok(host_geometry) = q_hosts.get(*host_entity) else {
             // The HostConnection is probably missing, so it makes no sense to update the fields
             continue;
         };
 
-        if render_settings.field && (host_geometry.is_changed() || mesh_component.is_none()) {
+        if render_settings.field && (host_geometry.is_changed() || has_mesh) {
             commands.entity(entity).insert((
                 Mesh3d(mesh_assets.add(field_mesh(&host_geometry))),
                 MeshMaterial3d(white_material.opaque.clone()),

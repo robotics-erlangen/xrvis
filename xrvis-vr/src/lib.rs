@@ -104,14 +104,14 @@ fn modify_cameras(
 
 fn spawn_new_hosts(
     mut commands: Commands,
-    q_available_hosts: Query<(&Host, Option<&HostConnection>, Entity)>,
+    q_available_hosts: Query<(&Host, Has<HostConnection>, Entity)>,
     q_spawned_field: Option<Single<(&Field, Entity)>>,
 ) {
-    if let Some((host, host_conn, host_entity)) = q_available_hosts.iter().next()
+    if let Some((host, has_host_conn, host_entity)) = q_available_hosts.iter().next()
         && q_spawned_field.is_none()
     {
         // Spawn a new fields if there isn't one currently spawned
-        if host_conn.is_none() {
+        if !has_host_conn {
             commands.entity(host_entity).insert(host.start_connection());
         }
         commands.spawn((

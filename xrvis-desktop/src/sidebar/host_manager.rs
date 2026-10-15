@@ -46,20 +46,16 @@ impl Template for HostManagerTemplate {
 
     fn build_template(&self, context: &mut TemplateContext) -> Result<Self::Output> {
         let hosts = context.entity.world_scope(|world| {
-            let mut q_host = world.query::<(
-                &Host,
-                Option<&HostConnection>,
-                Option<&GeometryFields>,
-                Entity,
-            )>();
+            let mut q_host =
+                world.query::<(&Host, Has<HostConnection>, Option<&GeometryFields>, Entity)>();
             let mut q_field = world.query::<&FieldId>();
             q_host
                 .iter(world)
-                .map(|(host, host_conn, geom_fields, host_entity)| {
+                .map(|(host, has_host_conn, geom_fields, host_entity)| {
                     (
                         host.clone(),
                         host_entity,
-                        host_conn.is_some(),
+                        has_host_conn,
                         geom_fields.and_then(|field_ref| {
                             q_field
                                 .get(world, field_ref.iter().next().unwrap())
@@ -294,13 +290,13 @@ fn on_connect_click(
     mut commands: Commands,
     q_parent: Query<&ChildOf>,
     q_entry: Query<&HostUiRepresentsEntity>,
-    q_host: Query<(&Host, Option<&HostConnection>, Entity)>,
+    q_host: Query<(&Host, Has<HostConnection>, Entity)>,
 ) {
     if let Ok(entry_entity) = q_parent.get(click.entity)
         && let Ok(host_ref) = q_entry.get(entry_entity.0)
-        && let Ok((host, host_conn, host_entity)) = q_host.get(host_ref.0)
+        && let Ok((host, has_host_conn, host_entity)) = q_host.get(host_ref.0)
     {
-        if host_conn.is_some() {
+        if has_host_conn {
             commands.entity(host_entity).remove::<HostConnection>();
         } else {
             commands.entity(host_entity).insert(host.start_connection());
@@ -314,17 +310,12 @@ fn on_spawn_click(
     mut commands: Commands,
     q_parent: Query<&ChildOf>,
     q_entry: Query<&HostUiRepresentsEntity>,
-    q_host: Query<(
-        &Host,
-        Option<&HostConnection>,
-        Option<&GeometryFields>,
-        Entity,
-    )>,
+    q_host: Query<(&Host, Has<HostConnection>, Option<&GeometryFields>, Entity)>,
     q_field: Query<&FieldId>,
 ) {
     if let Ok(entry_entity) = q_parent.get(click.entity)
         && let Ok(host_ref) = q_entry.get(entry_entity.0)
-        && let Ok((host, host_conn, host_usages, host_entity)) = q_host.get(host_ref.0)
+        && let Ok((host, has_host_conn, host_usages, host_entity)) = q_host.get(host_ref.0)
     {
         if let Some(fields) = host_usages {
             // This UI will only ever spawn one, but the backend supports multiple
@@ -333,7 +324,7 @@ fn on_spawn_click(
             }
         } else {
             // Autoconnect for one-click placement
-            if host_conn.is_none() {
+            if !has_host_conn {
                 commands.entity(host_entity).insert(host.start_connection());
             }
 

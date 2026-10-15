@@ -73,11 +73,11 @@ pub(crate) fn update_visualization_names(
     >,
     mut q_vis_sources: Query<(
         &VisualizationSourceId,
-        Option<&VisualizationSourceName>,
+        Has<VisualizationSourceName>,
         Option<&Children>,
         Entity,
     )>,
-    mut q_visualizations: Query<(&VisualizationId, Option<&VisualizationName>, Entity)>,
+    mut q_visualizations: Query<(&VisualizationId, Has<VisualizationName>, Entity)>,
 ) {
     let (cached_mappings, source_entities) = match q_hosts.get_mut(host_entity) {
         Ok(c) => c,
@@ -90,7 +90,7 @@ pub(crate) fn update_visualization_names(
     };
 
     let mut source_iter = q_vis_sources.iter_many_mut(source_entities.into_iter().flatten());
-    while let Some(Ok((source_id, source_name, vis_entities, source_entity))) =
+    while let Some(Ok((source_id, has_source_name, vis_entities, source_entity))) =
         source_iter.fetch_next()
     {
         // Update source name
@@ -98,7 +98,7 @@ pub(crate) fn update_visualization_names(
             commands
                 .entity(source_entity)
                 .insert_if_neq(VisualizationSourceName(new_name.clone()));
-        } else if source_name.is_some() {
+        } else if has_source_name {
             commands
                 .entity(source_entity)
                 .remove::<VisualizationSourceName>();
@@ -106,12 +106,12 @@ pub(crate) fn update_visualization_names(
 
         // Update visualization names
         let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
-        while let Some(Ok((vis_id, vis_name, vis_entity))) = vis_iter.fetch_next() {
+        while let Some(Ok((vis_id, has_vis_name, vis_entity))) = vis_iter.fetch_next() {
             if let Some(new_name) = vis_mappings.name.get(&vis_id.0) {
                 commands
                     .entity(vis_entity)
                     .insert_if_neq(VisualizationName(new_name.clone()));
-            } else if vis_name.is_some() {
+            } else if has_vis_name {
                 commands.entity(vis_entity).remove::<VisualizationName>();
             }
         }

@@ -342,7 +342,7 @@ fn drive_field_dragging(
         &Robot,
         &Team,
         &Transform,
-        Option<&RobotDraggedBy>,
+        Has<RobotDraggedBy>,
         &ChildOf,
         Entity,
     )>,
@@ -383,8 +383,8 @@ fn drive_field_dragging(
             let Some((robot_id, robot_team, robot_entity)) = q_robots
                 .iter()
                 .find(
-                    |(_, _, robot_transform, dragged, ChildOf(robot_parent), _)| {
-                        if *robot_parent != field_entity || dragged.is_some() {
+                    |(_, _, robot_transform, has_dragged, ChildOf(robot_parent), _)| {
+                        if *robot_parent != field_entity || *has_dragged {
                             return false;
                         }
                         (robot_transform.translation.xz() * Vec2::new(1., -1.))
