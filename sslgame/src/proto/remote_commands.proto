@@ -21,30 +21,34 @@ message VisualizationFilter {
 
 // Sets a manual robot command, which stays active until another command is sent. Send an empty command to hand control back to the ai.
 message RobotCommand {
+    // Can either be a position or velocity. Position default is the current position, velocity default is 0.
+    message TranslationVector {
+        optional float x = 1;
+        optional float y = 2;
+    }
+
     required RobotRef robot = 1;
     // If the robot doesn't have the ball: Use the host ai to catch the ball. Depending on the implementation it might take away control completely or still allow for some adjustments.
     // If the robot has the ball: Dribbles the ball.
     optional bool hold_ball = 2;
-    oneof move_target {
-        RobotMoveTarget world_pos = 3;
-        RobotMoveTarget world_vel = 4;
-        RobotMoveTarget local_vel = 5;
+    oneof translation {
+        TranslationVector world_pos = 3;
+        TranslationVector world_vel = 4;
+        TranslationVector local_vel = 5;
     }
-    oneof kick_command {
-        float linear_kick_speed = 6;
-        float linear_kick_distance = 7;
-        float chip_kick_distance = 8;
+    oneof rotation {
+        float angle_pos = 6;
+        // In rad/s
+        float angle_vel = 7;
+    }
+    oneof kick {
+        float linear_kick_speed = 8;
+        float linear_kick_distance = 9;
+        float chip_kick_distance = 10;
     }
 }
 
 message RobotRef {
     required uint32 robot_id = 1;
     optional bool is_blue = 2;
-}
-
-// Target for a robot move command. Can either be a position or velocity. Position default is the current position, velocity default is 0.
-message RobotMoveTarget {
-    optional float x = 1;
-    optional float y = 2;
-    optional float phi = 3;
 }

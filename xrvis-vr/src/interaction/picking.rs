@@ -15,7 +15,7 @@ use sslgame::hosts::GeometryHost;
 use sslgame::hosts::data::FieldGeometry;
 use sslgame::hosts::robot_control::RobotCommands;
 use sslgame::panels::{SpatialPanel, SpatialUiRoot};
-use sslgame::proto::{RobotCommand, RobotMoveTarget, RobotRef, robot_command};
+use sslgame::proto::{RobotCommand, RobotRef, robot_command};
 use std::ops::Range;
 
 const LEFT_HAND_POINTER_ID: PointerId = PointerId::Custom(Uuid::from_u128(10101010));
@@ -418,12 +418,14 @@ fn drive_field_dragging(
             RobotCommand {
                 robot: robot_ref,
                 hold_ball: None,
-                move_target: Some(robot_command::MoveTarget::WorldPos(RobotMoveTarget {
-                    x: Some(field_hit.pos_2d.x),
-                    y: Some(field_hit.pos_2d.y),
-                    phi: None,
-                })),
-                kick_command: None,
+                translation: Some(robot_command::Translation::WorldPos(
+                    robot_command::TranslationVector {
+                        x: Some(field_hit.pos_2d.x),
+                        y: Some(field_hit.pos_2d.y),
+                    },
+                )),
+                rotation: None,
+                kick: None,
             },
         );
     }
