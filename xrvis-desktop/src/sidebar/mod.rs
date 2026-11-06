@@ -16,7 +16,18 @@ pub fn sidebar_plugin(app: &mut App) {
     app.add_plugins(robots_inspector::robots_inspector_plugin);
     app.add_plugins(vis_inspector::vis_inspector_plugin);
 
+    app.insert_resource(SelectedField::default());
+
     app.add_observer(on_field_create);
+}
+
+#[derive(Resource, Default)]
+pub struct SelectedField(Option<Entity>);
+
+impl SelectedField {
+    pub fn get(&self) -> Option<Entity> {
+        self.0
+    }
 }
 
 // ======== Inspector ========
@@ -243,6 +254,7 @@ fn on_field_create(
 fn on_collapsed_click(
     click: On<Activate>,
     mut commands: Commands,
+    mut selected_field: ResMut<SelectedField>,
     q_parent: Query<&ChildOf>,
     q_field_entries: Query<&SidebarEntryRepresents>,
     q_field: Query<&FieldId>,
@@ -266,17 +278,24 @@ fn on_collapsed_click(
                 *last_selected_inspector,
             ))
             .id();
+        selected_field.0 = Some(*field_entity);
         commands.entity(*sidebar_entity).insert_child(0, new_entity);
     }
 }
 
-fn on_expanded_click(click: On<Activate>, mut commands: Commands, q_parent: Query<&ChildOf>) {
+fn on_expanded_click(
+    click: On<Activate>,
+    mut selected_field: ResMut<SelectedField>,
+    mut commands: Commands,
+    q_parent: Query<&ChildOf>,
+) {
     if let Ok(expanded_entry_entity) = q_parent.get(click.entity)
         && let Ok(sidebar_entity) = q_parent.get(expanded_entry_entity.0)
         && let Ok(container_entity) = q_parent.get(sidebar_entity.0)
     {
         commands.queue(collapse_expanded_entry(sidebar_entity.0));
         commands.queue(replace_panel_command(container_entity.0, None::<()>));
+        selected_field.0 = None;
     }
 }
 
@@ -319,6 +338,7 @@ fn on_inspector_button_click(
 fn on_plus_click(
     click: On<Activate>,
     mut commands: Commands,
+    mut selected_field: ResMut<SelectedField>,
     q_parent: Query<&ChildOf>,
     mut q_button_variant: Query<&mut ButtonVariant>,
 ) {
@@ -327,6 +347,7 @@ fn on_plus_click(
         && let Ok(ChildOf(container_entity)) = q_parent.get(*sidebar_entity)
         && let Ok(mut button_variant) = q_button_variant.get_mut(button_entity)
     {
+        selected_field.0 = None;
         if *button_variant == ButtonVariant::Normal {
             commands.queue(collapse_expanded_entry(*sidebar_entity));
             commands.queue(replace_panel_command(

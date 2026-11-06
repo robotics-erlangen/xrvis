@@ -8,18 +8,20 @@ use bevy::prelude::*;
 pub fn extended_dark_theme() -> feathers::theme::ThemeProps {
     let mut feathers_dark = feathers::dark_theme::create_dark_theme();
 
-    // Define every used semantic token, even the ones from feathers, to avoid breakages when updating
+    // Define every used semantic token and overwrite some feathers tokens
     feathers_dark.semantic_base.extend([
         (
             feathers_semantic::SURFACE_WINDOW,
             palette::GRAY_0.darker(0.1),
         ),
-        (feathers_semantic::SURFACE_PANE_BODY, palette::GRAY_1),
-        (feathers_semantic::TEXT_ON_ACCENT, palette::WHITE),
-        (feathers_semantic::TEXT_DEFAULT, palette::LIGHT_GRAY_1),
+        //(feathers_semantic::SURFACE_PANE_BODY, palette::GRAY_1),
+        //(feathers_semantic::TEXT_ON_ACCENT, palette::WHITE),
+        //(feathers_semantic::TEXT_DEFAULT, palette::LIGHT_GRAY_1),
         (semantic::BORDER_ACCENT, palette::ACCENT),
         (semantic::FILL_ACCENT_TINT, palette::ACCENT.with_alpha(0.1)),
         (semantic::FILL_ACCENT_WEAK, palette::ACCENT.with_alpha(0.5)),
+        (semantic::BORDER_WEAK, palette::GRAY_1),
+        (semantic::BORDER, palette::GRAY_3),
         (semantic::GREEN, tailwind::GREEN_500.into()),
         (semantic::RED, tailwind::RED_500.into()),
         (semantic::YELLOW, Srgba::rgb_u8(250, 204, 21).into()),
@@ -37,6 +39,9 @@ pub fn extended_dark_theme() -> feathers::theme::ThemeProps {
         (SIDEBAR_EXPANDED_FIELD_BORDER, semantic::BORDER_ACCENT),
         (SIDEBAR_EXPANDED_FIELD_BG, semantic::FILL_ACCENT_TINT),
         (SIDEBAR_EXPANDED_FIELD_BUTTON, semantic::FILL_ACCENT_WEAK),
+        (TABS_UNSELECTED_BORDER, semantic::BORDER_WEAK),
+        (TABS_SELECTED_BORDER, semantic::BORDER),
+        (TABS_SELECTED_BG, feathers_semantic::SURFACE_PANE_BODY),
         (GREEN, semantic::GREEN),
         (RED, semantic::RED),
         (YELLOW, semantic::YELLOW),

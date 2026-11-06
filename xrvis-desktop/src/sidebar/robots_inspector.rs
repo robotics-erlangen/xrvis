@@ -323,26 +323,26 @@ impl RobotControlSource {
 fn control_selector_scene(robot_entity: Entity) -> impl Scene {
     bsn! {
         @FeathersMenu
+        Children [
+            @FeathersMenuButton {
+                @caption: bsn! {
+                    @icon(lucide_icons::Icon::BrainCircuit, px(16))
+                    RobotControlButtonIcon(robot_entity)
+                },
+            }
+            Node {
+                height: percent(100),
+                padding: {UiRect::all(px(3))},
+            }
+            --
+            @FeathersMenuPopup
+            RobotControlPopup(robot_entity)
             Children [
-                @FeathersMenuButton {
-                    @caption: bsn! {
-                        @icon(lucide_icons::Icon::BrainCircuit, px(16))
-                        RobotControlButtonIcon(robot_entity)
-                    },
-                }
-                Node {
-                    height: percent(100),
-                    padding: {UiRect::all(px(3))},
-                }
+                @control_option_scene(robot_entity, RobotControlSource::Ai, "AI")
                 --
-                @FeathersMenuPopup
-                RobotControlPopup(robot_entity)
-                Children [
-                    @control_option_scene(robot_entity, RobotControlSource::Ai, "AI")
-                    --
-                    @control_option_scene(robot_entity, RobotControlSource::Keyboard, "Keyboard")
-                ]
+                @control_option_scene(robot_entity, RobotControlSource::Keyboard, "Keyboard")
             ]
+        ]
     }
 }
 

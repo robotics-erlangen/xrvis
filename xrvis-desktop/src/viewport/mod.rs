@@ -9,10 +9,12 @@ use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 
+mod camera_tabs;
 mod panorbit_cam;
 mod robot_cam;
 
 pub fn viewport_plugin(app: &mut App) {
+    app.add_plugins(camera_tabs::camera_tabs_plugin);
     app.add_plugins(panorbit_cam::panorbit_camera_plugin);
     app.add_plugins(robot_cam::robot_cam_plugin);
     app.add_systems(
@@ -29,7 +31,18 @@ struct ViewportRenderTarget(Handle<Image>);
 
 pub fn scene() -> impl Scene {
     bsn! {
-        ~ViewportTemplate
+        Node {
+            flex_direction: FlexDirection::Column,
+            height: percent(100),
+            flex_grow: 1.0,
+            row_gap: px(6),
+        }
+        Children [
+            @camera_tabs::scene(#Viewport)
+            --
+            #Viewport
+            ~ViewportTemplate
+        ]
     }
 }
 

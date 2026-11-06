@@ -8,6 +8,9 @@ pub mod semantic {
     pub const FILL_ACCENT_TINT: SemanticToken = SemanticToken::new_static("xrvis.fill.accent.tint");
     pub const FILL_ACCENT_WEAK: SemanticToken = SemanticToken::new_static("xrvis.fill.accent.weak");
 
+    pub const BORDER_WEAK: SemanticToken = SemanticToken::new_static("xrvis.border.weak");
+    pub const BORDER: SemanticToken = SemanticToken::new_static("xrvis.border");
+
     pub const GREEN: SemanticToken = SemanticToken::new_static("xrvis.green");
     pub const RED: SemanticToken = SemanticToken::new_static("xrvis.red");
     pub const YELLOW: SemanticToken = SemanticToken::new_static("xrvis.yellow");
@@ -32,6 +35,11 @@ pub const SIDEBAR_EXPANDED_FIELD_BG: ThemeToken =
 
 pub const SIDEBAR_EXPANDED_FIELD_BUTTON: ThemeToken =
     ThemeToken::new_static("xrvis.sidebar.expanded.button");
+
+pub const TABS_UNSELECTED_BORDER: ThemeToken =
+    ThemeToken::new_static("xrvis.tabs.unselected.border");
+pub const TABS_SELECTED_BORDER: ThemeToken = ThemeToken::new_static("xrvis.tabs.selected.border");
+pub const TABS_SELECTED_BG: ThemeToken = ThemeToken::new_static("xrvis.tabs.selected.bg");
 
 pub const GREEN: ThemeToken = ThemeToken::new_static("xrvis.green");
 pub const RED: ThemeToken = ThemeToken::new_static("xrvis.red");

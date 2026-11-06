@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use std::cmp::PartialEq;
+use std::fmt::{Display, Formatter};
 
 pub mod host_transfer;
 pub mod robots;
@@ -13,11 +14,20 @@ pub fn field_plugin(app: &mut App) {
 }
 
 /// SSL team. Used both as a normal value and a component on robots.
-#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Team {
     #[default]
     Yellow,
     Blue,
+}
+
+impl Display for Team {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Team::Yellow => write!(f, "Yellow"),
+            Team::Blue => write!(f, "Blue"),
+        }
+    }
 }
 
 #[derive(Component, Debug)]
