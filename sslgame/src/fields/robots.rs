@@ -17,6 +17,8 @@ use std::time::{Duration, Instant};
 
 // TODO: Refactor all of this. The plugin does setup for unrelated code like transform filtering, and the rest is just one huge function that behaves differently from everything else in host_transfer.
 
+const BALL_RADIUS: f32 = 0.0215;
+
 pub fn robot_plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<DepthMaskMaterial>::default());
 
@@ -26,9 +28,8 @@ pub fn robot_plugin(app: &mut App) {
     let robot_mask_mesh = meshes.add(MeshBuilder::build(
         &CylinderMeshBuilder::new(0.09, 0.15, 32).anchor(CylinderAnchor::Bottom),
     ));
-    // FIXME: Ball in the ground
     let ball_mesh = meshes.add(MeshBuilder::build(&SphereMeshBuilder::new(
-        0.0215,
+        BALL_RADIUS,
         SphereKind::Ico { subdivisions: 3 },
     )));
 
@@ -112,7 +113,11 @@ pub(crate) fn update_world_state(
 
         // Spawn new balls
         for new_ball in &world_state.ball {
-            let new_ball_pos = Vec3::new(new_ball.p_x, new_ball.p_z.unwrap_or(0.0), new_ball.p_y);
+            let new_ball_pos = Vec3::new(
+                new_ball.p_x,
+                new_ball.p_z.unwrap_or(0.0) + BALL_RADIUS,
+                new_ball.p_y,
+            );
 
             let mut new_ball = commands.spawn((
                 ChildOf(field),
