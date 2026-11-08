@@ -24,7 +24,11 @@ pub fn viewport_plugin(app: &mut App) {
 }
 
 #[derive(Component)]
+#[relationship(relationship_target = DefaultCameraOfViewport)]
 struct DefaultViewportCamera(Entity);
+#[derive(Component)]
+#[relationship_target(relationship = DefaultViewportCamera)]
+struct DefaultCameraOfViewport(Entity);
 
 #[derive(Component)]
 struct ViewportRenderTarget(Handle<Image>);
