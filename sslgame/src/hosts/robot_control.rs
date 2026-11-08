@@ -8,6 +8,7 @@ use bevy::prelude::ops::atan2;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
 const MOVE_SPEED: f32 = 1.5;
@@ -41,11 +42,10 @@ impl RobotCommandProcessor {
     /// Sets the command for a single robot for this frame. Will be merged with any previous commands from this frame.
     pub fn set(&mut self, new: proto::RobotCommand) {
         /// Returns the only value or the result of the function if both are set
-        fn apply_option<T: Copy>(base: Option<T>, new: Option<T>, op: fn(T, T) -> T) -> Option<T> {
-            match (base, new) {
-                (Some(base_val), Some(new_val)) => Some(op(base_val, new_val)),
-                (base @ Some(_), None) => base,
-                (None, new_val) => new_val,
+        fn merge_option<T>(a: Option<T>, b: Option<T>, f: impl FnOnce(T, T) -> T) -> Option<T> {
+            match (a, b) {
+                (Some(a), Some(b)) => Some(f(a, b)),
+                (a, b) => a.or(b),
             }
         }
 
@@ -53,40 +53,39 @@ impl RobotCommandProcessor {
             Entry::Occupied(mut entry) => {
                 let base = entry.get_mut();
 
-                base.hold_ball = apply_option(base.hold_ball, new.hold_ball, |a, b| a || b);
+                base.hold_ball = merge_option(base.hold_ball, new.hold_ball, |a, b| a || b);
                 base.translation =
-                    apply_option(base.translation, new.translation, |a, b| match (a, b) {
+                    merge_option(base.translation, new.translation, |a, b| match (a, b) {
                         (Translation::WorldPos(a), Translation::WorldPos(b)) => {
                             // Pos average isn't commutative for 2+ inputs, but it's still better than fully replacing the last target
                             Translation::WorldPos(proto::robot_command::TranslationVector {
-                                x: apply_option(a.x, b.x, |a, b| (a + b) / 2.0),
-                                y: apply_option(a.y, b.y, |a, b| (a + b) / 2.0),
+                                x: merge_option(a.x, b.x, |a, b| (a + b) / 2.0),
+                                y: merge_option(a.y, b.y, |a, b| (a + b) / 2.0),
                             })
                         }
                         (Translation::WorldVel(a), Translation::WorldVel(b)) => {
                             Translation::WorldVel(proto::robot_command::TranslationVector {
-                                x: apply_option(a.x, b.x, |a, b| a + b),
-                                y: apply_option(a.y, b.y, |a, b| a + b),
+                                x: merge_option(a.x, b.x, |a, b| a + b),
+                                y: merge_option(a.y, b.y, |a, b| a + b),
                             })
                         }
                         (Translation::LocalVel(a), Translation::LocalVel(b)) => {
                             Translation::LocalVel(proto::robot_command::TranslationVector {
-                                x: apply_option(a.x, b.x, |a, b| a + b),
-                                y: apply_option(a.y, b.y, |a, b| a + b),
+                                x: merge_option(a.x, b.x, |a, b| a + b),
+                                y: merge_option(a.y, b.y, |a, b| a + b),
                             })
                         }
                         _ => b,
                     });
-                base.rotation = apply_option(base.rotation, new.rotation, |a, b| match (a, b) {
-                    // Pos average isn't commutative for 2+ inputs, but it's still better than fully replacing the last target
+                base.rotation = merge_option(base.rotation, new.rotation, |a, b| match (a, b) {
                     (Rotation::AnglePos(a), Rotation::AnglePos(b)) => {
-                        Rotation::AnglePos(((a + b) / 2.0).rem_euclid(2f32 * std::f32::consts::PI))
+                        // Pos average isn't commutative for 2+ inputs, but it's still better than fully replacing the last target
+                        Rotation::AnglePos(((a + b) / 2.0).rem_euclid(2.0 * PI))
                     }
-                    (Rotation::AngleVel(a), Rotation::AngleVel(b)) => Rotation::AnglePos(a + b),
+                    (Rotation::AngleVel(a), Rotation::AngleVel(b)) => Rotation::AngleVel(a + b),
                     _ => b,
                 });
-
-                base.kick = apply_option(base.kick, new.kick, |_, b| b);
+                base.kick = new.kick.or(base.kick);
             }
             Entry::Vacant(entry) => {
                 entry.insert(new);
@@ -136,13 +135,7 @@ fn send_robot_command(
             connection
                 .sender
                 .send_blocking(proto::ws_request::Content::ControlRobot(
-                    proto::RobotCommand {
-                        robot,
-                        hold_ball: None,
-                        translation: None,
-                        rotation: None,
-                        kick: None,
-                    },
+                    proto::RobotCommand { robot, ..default() },
                 ))
                 .unwrap();
         }
@@ -151,6 +144,13 @@ fn send_robot_command(
     }
 
     *last_send = Some(now);
+}
+
+/// Makes input from movement sources like [`RobotControlledByGamepad`] relative to a fixed
+/// forward direction in field coordinates instead of that robot's local orientation.
+#[derive(Component, Clone, Copy)]
+pub struct WorldSpaceRobotControl {
+    pub field_forward: Vec2,
 }
 
 /// Controls a [Robot] in local coordinates using keyboard inputs.
@@ -216,34 +216,23 @@ impl<'w, 's> RobotCommands<'w, 's> {
 /// Implements the [RobotControlledByKeyboard] behavior
 fn process_keyboard_robot_control(
     mut robot_commands: RobotCommands,
-    q_robots: Query<(&Robot, &Team, &ChildOf), With<RobotControlledByKeyboard>>,
+    q_robots: Query<
+        (&Robot, &Team, Option<&WorldSpaceRobotControl>, &ChildOf),
+        With<RobotControlledByKeyboard>,
+    >,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
-    for (robot, team, field_ref) in q_robots.iter() {
+    for (robot, team, global_control, field_ref) in q_robots.iter() {
         // Normal global coordinates are right-handed, +x forward. So the local ones should be too.
-        let mut move_input = Vec2::ZERO;
-        if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {
-            move_input.x += MOVE_SPEED;
-        }
-        if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
-            move_input.y += MOVE_SPEED;
-        }
-        if keyboard.pressed(KeyCode::KeyS) || keyboard.pressed(KeyCode::ArrowDown) {
-            move_input.x -= MOVE_SPEED;
-        }
-        if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
-            move_input.y -= MOVE_SPEED;
-        }
-
-        let mut rotate_input = 0f32;
-        if keyboard.pressed(KeyCode::KeyQ) {
-            rotate_input += ROT_SPEED;
-        }
-        if keyboard.pressed(KeyCode::KeyE) {
-            rotate_input -= ROT_SPEED;
-        }
-
-        let hold_ball = Some(keyboard.pressed(KeyCode::Space) || keyboard.pressed(KeyCode::KeyR));
+        let move_input = Vec2::new(
+            keyboard.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]) as i32 as f32
+                - keyboard.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]) as i32 as f32,
+            keyboard.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]) as i32 as f32
+                - keyboard.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]) as i32 as f32,
+        );
+        let rotate_input = keyboard.pressed(KeyCode::KeyQ) as i32 as f32
+            - keyboard.pressed(KeyCode::KeyE) as i32 as f32;
+        let hold_ball = keyboard.any_pressed([KeyCode::Space, KeyCode::KeyR]);
 
         let kick = if keyboard.pressed(KeyCode::KeyF) {
             Some(proto::robot_command::Kick::LinearKickSpeed(3.0))
@@ -253,21 +242,21 @@ fn process_keyboard_robot_control(
             None
         };
 
-        let command = proto::RobotCommand {
-            robot: proto::RobotRef {
-                robot_id: robot.0 as u32,
-                is_blue: Some(*team == Team::Blue),
-            },
-            hold_ball,
-            translation: Some(Translation::LocalVel(
-                proto::robot_command::TranslationVector {
-                    x: Some(move_input.x),
-                    y: Some(move_input.y),
+        let command = set_command_movement(
+            proto::RobotCommand {
+                robot: proto::RobotRef {
+                    robot_id: robot.0 as u32,
+                    is_blue: Some(*team == Team::Blue),
                 },
-            )),
-            rotation: Some(Rotation::AngleVel(rotate_input)),
-            kick,
-        };
+                hold_ball: Some(hold_ball),
+                translation: None,
+                rotation: None,
+                kick,
+            },
+            move_input,
+            Vec2::Y.rotate_angle(rotate_input),
+            global_control.copied(),
+        );
 
         robot_commands.submit(field_ref.0, command);
     }
@@ -276,13 +265,19 @@ fn process_keyboard_robot_control(
 /// Implements the [RobotControlledByGamepad] behavior
 fn process_gamepad_robot_control(
     mut robot_commands: RobotCommands,
-    q_robots: Query<(&Robot, &Team, &RobotControlledByGamepad, &ChildOf)>,
+    q_robots: Query<(
+        &Robot,
+        &Team,
+        &RobotControlledByGamepad,
+        Option<&WorldSpaceRobotControl>,
+        &ChildOf,
+    )>,
     q_gamepads: Query<&Gamepad>,
 ) {
-    for (robot, team, gamepad_ref, field_ref) in q_robots.iter() {
+    for (robot, team, gamepad_ref, global_control, field_ref) in q_robots.iter() {
         let gamepad = q_gamepads.get(gamepad_ref.0).unwrap();
 
-        let left_stick = gamepad.left_stick() * MOVE_SPEED;
+        let left_stick = gamepad.left_stick();
         let right_stick = gamepad.right_stick();
 
         let hold_ball = gamepad.pressed(GamepadButton::LeftTrigger)
@@ -296,27 +291,71 @@ fn process_gamepad_robot_control(
             None
         };
 
-        let command = proto::RobotCommand {
-            robot: proto::RobotRef {
-                robot_id: robot.0 as u32,
-                is_blue: Some(*team == Team::Blue),
+        let command = set_command_movement(
+            proto::RobotCommand {
+                robot: proto::RobotRef {
+                    robot_id: robot.0 as u32,
+                    is_blue: Some(*team == Team::Blue),
+                },
+                hold_ball: Some(hold_ball),
+                translation: None,
+                rotation: None,
+                kick,
             },
-            hold_ball: Some(hold_ball),
-            // See keyboard input for coordinate explanations
-            translation: Some(Translation::WorldVel(
+            left_stick,
+            right_stick,
+            global_control.copied(),
+        );
+
+        robot_commands.submit(field_ref.0, command);
+    }
+}
+
+/// Helper for setting [`RobotCommand::translation`](proto::RobotCommand::translation) and
+/// [`RobotCommand::rotation`](proto::RobotCommand::rotation) based on the inputs and that
+/// robot's [`WorldSpaceRobotControl`].
+fn set_command_movement(
+    base: proto::RobotCommand,
+    move_input: Vec2,
+    rot_input: Vec2,
+    global_control: Option<WorldSpaceRobotControl>,
+) -> proto::RobotCommand {
+    match global_control {
+        Some(global) => {
+            let look_angle = atan2(global.field_forward.y, global.field_forward.x);
+            let world_input = move_input.rotate_angle(look_angle) * MOVE_SPEED;
+
+            proto::RobotCommand {
+                translation: Some(Translation::WorldVel(
+                    proto::robot_command::TranslationVector {
+                        x: Some(world_input.y),
+                        y: Some(-world_input.x),
+                    },
+                )),
+                rotation: if rot_input.length_squared() > 0.1 {
+                    Some(Rotation::AnglePos(
+                        (atan2(-rot_input.x, rot_input.y) + look_angle)
+                            .rem_euclid(2.0 * std::f32::consts::PI),
+                    ))
+                } else {
+                    None
+                },
+                ..base
+            }
+        }
+        None => proto::RobotCommand {
+            translation: Some(Translation::LocalVel(
                 proto::robot_command::TranslationVector {
-                    x: Some(left_stick.x),
-                    y: Some(left_stick.y),
+                    x: Some(move_input.y),
+                    y: Some(-move_input.x),
                 },
             )),
-            rotation: if right_stick.length_squared() > 0.1 {
-                Some(Rotation::AnglePos(atan2(right_stick.x, -right_stick.y)))
+            rotation: if rot_input.x.abs() > 0.1 {
+                Some(Rotation::AngleVel(-rot_input.x * ROT_SPEED))
             } else {
                 None
             },
-            kick,
-        };
-
-        robot_commands.submit(field_ref.0, command);
+            ..base
+        },
     }
 }
