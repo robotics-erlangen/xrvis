@@ -6,7 +6,7 @@ use std::{io, mem};
 pub trait SSMSocketExtension<T> {
     /// Creates and binds a new socket with all socket options required for multicast to work as expected
     fn bind_multicast(addr: impl ToSocketAddrs) -> io::Result<T>;
-    /// [join_multicast_v6](std::net::udp::UdpSocket::join_multicast_v6), but for [source-specific multicast](https://datatracker.ietf.org/doc/html/rfc4607) instead of the usual any-source multicast
+    /// [`join_multicast_v6`](std::net::UdpSocket::join_multicast_v6), but for [source-specific multicast](https://datatracker.ietf.org/doc/html/rfc4607) instead of the usual any-source multicast
     fn join_ssm_v6(&self, multiaddr: Ipv6Addr, source: Ipv6Addr, if_index: u32) -> io::Result<()>;
 }
 

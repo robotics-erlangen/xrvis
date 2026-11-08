@@ -17,52 +17,52 @@ pub fn vis_plugin(app: &mut App) {
 pub struct VisualizationNameMappings(pub VisMappings);
 
 // ======== Visualization sources ========
-/// The unique ID of this visualization source. Maps to a [VisualizationSourceName] through the [VisualizationNameMappings].
+/// The unique ID of this visualization source. Maps to a [`VisualizationSourceName`] through the [`VisualizationNameMappings`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
 pub struct VisualizationSourceId(pub u32);
-/// The human-readable name of a [VisualizationSourceId]. Created automatically from the host's [VisualizationNameMappings].
+/// The human-readable name of a [`VisualizationSourceId`]. Created automatically from the host's [`VisualizationNameMappings`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
 pub struct VisualizationSourceName(pub String);
 
 // ======== Visualizations ========
-/// The ID of this visualization, unique within its [VisualizationSourceId]. Maps to a [VisualizationName] through the [VisualizationNameMappings].
+/// The ID of this visualization, unique within its [`VisualizationSourceId`]. Maps to a [`VisualizationName`] through the [`VisualizationNameMappings`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
 pub struct VisualizationId(pub u32);
-/// The human-readable name of a [VisualizationId]. Created automatically from the host's [VisualizationNameMappings].
+/// The human-readable name of a [`VisualizationId`]. Created automatically from the host's [`VisualizationNameMappings`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
 pub struct VisualizationName(pub String);
-/// The latest data for a [VisualizationId]. Used to generate the mesh to display on fields.
+/// The latest data for a [`VisualizationId`]. Used to generate the mesh to display on fields.
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct VisualizationData(pub Visualization);
 
-/// Vis-side counterpart to [AllHostVisualizations]. Direct link to the host of the visualization, skipping the source entity.
+/// Vis-side counterpart to [`AllHostVisualizations`]. Direct link to the host of the visualization, skipping the source entity.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 #[relationship(relationship_target = AllHostVisualizations)]
 pub struct VisualizationFromHost(pub Entity);
-/// Host-side counterpart to [VisualizationFromHost]. Direct link to all visualizations of this host, skipping the source entities.
+/// Host-side counterpart to [`VisualizationFromHost`]. Direct link to all visualizations of this host, skipping the source entities.
 #[derive(Component, IntoIterator, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = VisualizationFromHost, linked_spawn)]
 pub struct AllHostVisualizations(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
-/// Field-side counterpart to [VisualizationUsages]. Any entity with this component will automatically get its target's mesh.
+/// Field-side counterpart to [`VisualizationUsages`]. Any entity with this component will automatically get its target's mesh.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 #[relationship(relationship_target = VisualizationUsages)]
 #[require(Transform)]
 pub struct VisualizationInstance(pub Entity);
-/// Host-side counterpart to [VisualizationInstance]. Contains all entities that should be updated from this entity's [VisualizationData].
+/// Host-side counterpart to [`VisualizationInstance`]. Contains all entities that should be updated from this entity's [`VisualizationData`].
 #[derive(Component, IntoIterator, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = VisualizationInstance, linked_spawn)]
 pub struct VisualizationUsages(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
-/// Marks that a visualization was not included in the last [VisualizationUpdate].
+/// Marks that a visualization was not included in the last [`VisualizationUpdate`].
 #[derive(Component)]
 pub struct InactiveVisualization;
 
-/// Adds a [VisualizationName]/[VisualizationSourceName] to each [VisualizationId]/[VisualizationSourceId]
+/// Adds a [`VisualizationName`]/[`VisualizationSourceName`] to each [`VisualizationId`]/[`VisualizationSourceId`]
 /// that is present in the provided mappings, for a single host.
 pub(crate) fn update_visualization_names(
     In((host_entity, vis_mappings)): In<(Entity, VisMappings)>,
@@ -129,13 +129,13 @@ pub(crate) fn update_visualization_names(
 }
 
 /// Updates the visualization entities for a single host. This system only provides the
-/// [VisualizationId] and the [VisualizationData], the names are managed by [update_visualization_names].
-/// Also note that hosts with an active [proto::VisualizationFilter](crate::proto::VisualizationFilter)
+/// [`VisualizationId`] and the [`VisualizationData`], the names are managed by [`update_visualization_names`].
+/// Also note that hosts with an active [`proto::VisualizationFilter`](crate::proto::VisualizationFilter)
 /// won't provide data for excluded entities, but they will still be present with an id.
 /// The generated structure looks like this:\
-/// \- ([Host], [HostConnection])\
-/// | \- ([VisualizationSourceId], Option<[VisualizationSourceName]>)\
-/// | | \- ([VisualizationId], Option<[VisualizationName]>, Option<[VisualizationData]>)
+/// \- ([`Host`], [`HostConnection`])\
+/// | \- ([`VisualizationSourceId`], Option<[`VisualizationSourceName`]>)\
+/// | | \- ([`VisualizationId`], Option<[`VisualizationName`]>, Option<[`VisualizationData`]>)
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_visualizations(
     In((host_entity, mut vis_update)): In<(Entity, VisualizationUpdate)>,
@@ -303,7 +303,7 @@ pub(crate) fn update_visualizations(
     }
 }
 
-/// Sends a [proto::VisualizationFilter](crate::proto::VisualizationFilter) to the host, based on which visualization entities have [VisualizationUsages].
+/// Sends a [`proto::VisualizationFilter`](crate::proto::VisualizationFilter) to the host, based on which visualization entities have [`VisualizationUsages`].
 fn send_vis_selection(
     q_hosts: Query<(&Host, &HostConnection, &Children)>,
     q_vis_sources: Query<(&VisualizationSourceId, &Children)>,

@@ -22,7 +22,7 @@ pub fn host_field_transfer_plugin(app: &mut App) {
     app.add_systems(PreUpdate, update_visualization_instances);
 }
 
-/// Transfers the game state from hosts to all fields related via [GameStateHost]
+/// Transfers the game state from hosts to all fields related via [`GameStateHost`]
 fn transfer_game_state(
     mut commands: Commands,
     mut q_fields: Query<(&GameStateHost, Option<&mut GameState>, Entity), With<Field>>,
@@ -46,7 +46,7 @@ fn transfer_game_state(
     }
 }
 
-/// Updates fields meshes based on the [FieldGeometry] of the fields's [GeometryHost]
+/// Updates fields meshes based on the [`FieldGeometry`] of the fields's [`GeometryHost`]
 #[allow(clippy::type_complexity)]
 fn transfer_field_geometry(
     mut commands: Commands,
@@ -71,7 +71,7 @@ fn transfer_field_geometry(
     }
 }
 
-/// Updates the mesh of all [VisualizationInstance]s based on changes to their referenced [VisualizationData]
+/// Updates the mesh of all [`VisualizationInstance`]s based on changes to their referenced [`VisualizationData`]
 fn update_visualization_instances(
     mut commands: Commands,
     render_settings: Res<RenderSettings>,

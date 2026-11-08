@@ -9,7 +9,7 @@ use bevy::tasks::{IoTaskPool, Task};
 use std::net::SocketAddr;
 use tracing::{error, info};
 
-/// Handles automatic creation and removal of [Host] entities
+/// Handles automatic creation and removal of [`Host`] entities
 pub fn discovery_plugin(app: &mut App) {
     app.add_systems(PreUpdate, receive_host_advertisements);
     app.world_mut()

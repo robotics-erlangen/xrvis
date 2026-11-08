@@ -5,8 +5,8 @@ use std::fmt::{Display, Formatter};
 pub mod host_transfer;
 pub mod robots;
 
-/// Transfers data that was received by the [host_plugin](crate::hosts::host_plugin) to every fields connected via
-/// host relations ([GeometryHost](crate::hosts::GeometryHost), [YellowRobotHost](crate::hosts::YellowRobotHost), ...).
+/// Transfers data that was received by the [`host_plugin`](crate::hosts::host_plugin) to every fields connected via
+/// host relations ([`GeometryHost`](crate::hosts::GeometryHost), [`YellowRobotHost`](crate::hosts::YellowRobotHost), ...).
 /// Also sets up the resources for robot rendering.
 pub fn field_plugin(app: &mut App) {
     app.add_plugins(robots::robot_plugin);

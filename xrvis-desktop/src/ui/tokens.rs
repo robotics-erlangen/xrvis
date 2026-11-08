@@ -1,6 +1,6 @@
 use bevy::feathers::theme::ThemeToken;
 
-/// Semantic tokens to complement [feathers::tokens::semantic](bevy::feathers::tokens::semantic)
+/// Semantic tokens to complement [`feathers::tokens::semantic`](bevy::feathers::tokens::semantic)
 pub mod semantic {
     use bevy::feathers::theme::SemanticToken;
 

@@ -7,7 +7,7 @@ use bevy::prelude::*;
 #[derive(Component, Deref, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GameState(pub proto::GameState);
 
-/// Simplified SSL fields geometry, a more ergonomic version of [proto::FieldGeometry](crate::proto::FieldGeometry).
+/// Simplified SSL fields geometry, a more ergonomic version of [`proto::FieldGeometry`](crate::proto::FieldGeometry).
 /// The network protocol marks most values as optional, so they will be filled in with reasonable defaults when converting with .into().
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct FieldGeometry {

@@ -43,7 +43,7 @@ pub fn inspector_base_scene() -> impl Scene {
     }
 }
 
-/// On a [Sidebar], it stores the last selected inspector. On an inspector button, it marks the inspector this button spawns.
+/// On a [`Sidebar`], it stores the last selected inspector. On an inspector button, it marks the inspector this button spawns.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 enum InspectorType {
     #[default]

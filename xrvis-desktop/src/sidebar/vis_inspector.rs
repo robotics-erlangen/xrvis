@@ -33,7 +33,7 @@ pub fn scene(field_entity: Entity) -> impl Scene {
     }
 }
 
-/// References the fields that this inspector interacts with. Should always be used in [bsn!], so the [VisInspectorTemplate] can initialize the UI.
+/// References the fields that this inspector interacts with. Should always be used in [`bsn!`], so the [`VisInspectorTemplate`] can initialize the UI.
 #[derive(Component, Clone, Copy)]
 #[relationship(relationship_target = FieldVisInspectedBy)]
 struct VisInspector(Entity);
@@ -41,7 +41,7 @@ struct VisInspector(Entity);
 #[relationship_target(relationship = VisInspector, linked_spawn)]
 struct FieldVisInspectedBy(Entity);
 
-/// Custom template for [VisInspector] that creates the initial UI using the current state of the referenced fields.
+/// Custom template for [`VisInspector`] that creates the initial UI using the current state of the referenced fields.
 #[derive(Default)]
 struct VisInspectorTemplate {
     field_entity: EntityTemplate,
@@ -99,7 +99,7 @@ impl Template for VisInspectorTemplate {
 // ======== Util relationships ========
 
 /// Used to link UI elements to their in-world counterparts
-/// - Inspector -> Field (Duplicate of [VisInspector])
+/// - Inspector -> Field (Duplicate of [`VisInspector`])
 /// - Tab -> Host root
 /// - SourceUI -> Source
 /// - VisUI -> Visualization

@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 const MOVE_SPEED: f32 = 1.5;
 const ROT_SPEED: f32 = 3.0;
 
-/// Adds the [RobotCommandProcessor] to hosts to safely send robot commands and handles
-/// the [RobotControlledByKeyboard] and [RobotControlledByGamepad] components.
+/// Adds the [`RobotCommandProcessor`] to hosts to safely send robot commands and handles
+/// the [`RobotControlledByKeyboard`] and [`RobotControlledByGamepad`] components.
 pub fn robot_control_plugin(app: &mut App) {
     app.add_observer(on_gamepad_removed);
     app.add_systems(
@@ -94,7 +94,7 @@ impl RobotCommandProcessor {
     }
 }
 
-/// Updates the [RobotCommandProcessor] components and sends their commands at regular intervals.
+/// Updates the [`RobotCommandProcessor`] components and sends their commands at regular intervals.
 fn send_robot_command(
     mut last_send: Local<Option<Instant>>,
     mut q_hosts: Query<(&mut RobotCommandProcessor, &HostConnection)>,
@@ -153,11 +153,11 @@ pub struct WorldSpaceRobotControl {
     pub field_forward: Vec2,
 }
 
-/// Controls a [Robot] in local coordinates using keyboard inputs.
+/// Controls a [`Robot`] in local coordinates using keyboard inputs.
 #[derive(Component, Default)]
 pub struct RobotControlledByKeyboard;
 
-/// Controls a [Robot] in local coordinates using the referenced [Gamepad].
+/// Controls a [`Robot`] in local coordinates using the referenced [`Gamepad`].
 #[derive(Component)]
 #[relationship(relationship_target = GamepadControlsRobots)]
 pub struct RobotControlledByGamepad(pub Entity);
@@ -166,16 +166,16 @@ pub struct RobotControlledByGamepad(pub Entity);
 #[relationship_target(relationship = RobotControlledByGamepad)]
 pub struct GamepadControlsRobots(Vec<Entity>);
 
-/// Gamepad disconnects only remove the [Gamepad] component, but leave its entity intact to remember
-/// [GamepadSettings] across reconnections (see [gamepad_connection_system](bevy::input::gamepad::gamepad_connection_system)).
-/// This removes the [RobotControlledByGamepad] relationship from the gamepad to free the controlled robots.
+/// Gamepad disconnects only remove the [`Gamepad`] component, but leave its entity intact to remember
+/// [`GamepadSettings`] across reconnections (see [`gamepad_connection_system`](bevy::input::gamepad::gamepad_connection_system)).
+/// This removes the [`RobotControlledByGamepad`] relationship from the gamepad to free the controlled robots.
 fn on_gamepad_removed(event: On<Remove<Gamepad>>, mut commands: Commands) {
     commands
         .entity(event.entity)
         .remove::<GamepadControlsRobots>();
 }
 
-/// Helper [SystemParam] for sending robot commands from a field.
+/// Helper [`SystemParam`] for sending robot commands from a field.
 /// Automatically handles the "field -> team robot host" lookup.
 #[derive(SystemParam)]
 pub struct RobotCommands<'w, 's> {
@@ -192,7 +192,7 @@ pub struct RobotCommands<'w, 's> {
 }
 
 impl<'w, 's> RobotCommands<'w, 's> {
-    /// Forwards a robot command to [RobotCommandProcessor::set] on the correct host for that team on this field.
+    /// Forwards a robot command to [`RobotCommandProcessor::set`] on the correct host for that team on this field.
     pub fn submit(&mut self, field_entity: Entity, command: proto::RobotCommand) {
         if let Ok((yellow_host_ref, blue_host_ref)) = self.q_fields.get(field_entity) {
             let team = if command.robot.is_blue() {
@@ -213,7 +213,7 @@ impl<'w, 's> RobotCommands<'w, 's> {
     }
 }
 
-/// Implements the [RobotControlledByKeyboard] behavior
+/// Implements the [`RobotControlledByKeyboard`] behavior
 fn process_keyboard_robot_control(
     mut robot_commands: RobotCommands,
     q_robots: Query<
@@ -262,7 +262,7 @@ fn process_keyboard_robot_control(
     }
 }
 
-/// Implements the [RobotControlledByGamepad] behavior
+/// Implements the [`RobotControlledByGamepad`] behavior
 fn process_gamepad_robot_control(
     mut robot_commands: RobotCommands,
     q_robots: Query<(

@@ -17,13 +17,13 @@ pub mod discovery;
 pub mod robot_control;
 pub mod visualizations;
 
-/// Named system set in [PreUpdate] to allow scheduling other systems directly after new host data is received.
+/// Named system set in [`PreUpdate`] to allow scheduling other systems directly after new host data is received.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UpdateHostDataSystemSet;
 
 /// The core plugin for handling network traffic from hosts.
 /// It does automatic host discovery, and receives incoming pakets
-/// from active [HostConnection]s and encodes them into the ecs.
+/// from active [`HostConnection`]s and encodes them into the ecs.
 pub fn host_plugin(app: &mut App) {
     app.add_plugins(discovery::discovery_plugin);
     app.add_plugins(robot_control::robot_control_plugin);
@@ -36,7 +36,7 @@ pub fn host_plugin(app: &mut App) {
 }
 
 /// Representation of a discovered host. Note that this component alone does not mean that
-/// the host is connected, just that it was found in discovery: Use [start_connection](Self::start_connection)
+/// the host is connected, just that it was found in discovery: Use [`start_connection`](Self::start_connection)
 /// to actually establish the connection and start tracking its fields state.
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Host {
@@ -45,9 +45,10 @@ pub struct Host {
 }
 
 impl Host {
-    /// Starts a background IO task for talking with a host. Add the returned [HostConnection]
-    /// component to the [Host] entity to start receiving and tracking its state.
-    /// Create a [Field] with host relations (like [YellowRobotHost]) to actually use this host's data.
+    /// Starts a background IO task for talking with a host. Add the returned [`HostConnection`]
+    /// component to the [`Host`] entity to start receiving and tracking its state.
+    /// Create a [`Field`](crate::fields::Field) with host relations (like [`YellowRobotHost`])
+    /// to actually use this host's data.
     pub fn start_connection(&self) -> HostConnection {
         let (rx_sender, rx_receiver) = async_channel::bounded(100);
         let (tx_sender, tx_receiver) = async_channel::bounded(10);
@@ -105,8 +106,8 @@ impl std::fmt::Display for Host {
     }
 }
 
-/// Handle to the IO task for an actively connected host. Create using [Host::start_connection], then insert
-/// it into the Host's entity to start updating related fields ([GeometryHost], [YellowRobotHost], ...).
+/// Handle to the IO task for an actively connected host. Create using [`Host::start_connection`], then insert
+/// it into the Host's entity to start updating related fields ([`GeometryHost`], [`YellowRobotHost`], ...).
 #[derive(Component, Debug)]
 #[require(GameState, FieldGeometry)]
 pub struct HostConnection {
@@ -120,7 +121,7 @@ pub struct HostConnection {
 // These relationships dictate where each fields is getting its data from and use
 // linked spawn to automatically despawn related fields when the host is dropped.
 
-/// Can be added to a [Field](crate::fields::Field) to receive a 3d model based on the [FieldGeometry] of that host.
+/// Can be added to a [`Field`](crate::fields::Field) to receive a 3d model based on the [`FieldGeometry`] of that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = GeometryFields)]
 pub struct GeometryHost(pub Entity);
@@ -128,7 +129,7 @@ pub struct GeometryHost(pub Entity);
 #[relationship_target(relationship = GeometryHost, linked_spawn)]
 pub struct GeometryFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::fields::Field) to receive [GameState] from that host.
+/// Can be added to a [`Field`](crate::fields::Field) to receive [`GameState`] from that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = GameStateFields)]
 pub struct GameStateHost(pub Entity);
@@ -136,7 +137,7 @@ pub struct GameStateHost(pub Entity);
 #[relationship_target(relationship = GameStateHost, linked_spawn)]
 pub struct GameStateFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::fields::Field) to receive a [Ball](crate::fields::robots::Ball) child entity, taking its position from that host.
+/// Can be added to a [`Field`](crate::fields::Field) to receive a [`Ball`](crate::fields::robots::Ball) child entity, taking its position from that host.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = BallFields)]
 pub struct BallHost(pub Entity);
@@ -144,8 +145,8 @@ pub struct BallHost(pub Entity);
 #[relationship_target(relationship = BallHost, linked_spawn)]
 pub struct BallFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::fields::Field) to receive [Robot](crate::fields::robots::Robot) child entities for all
-/// yellow robots from that host. Their rendering can be configured using [RenderSettings](crate::RenderSettings).
+/// Can be added to a [`Field`](crate::fields::Field) to receive [`Robot`](crate::fields::robots::Robot) child entities for all
+/// yellow robots from that host. Their rendering can be configured using [`RenderSettings`](crate::RenderSettings).
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = YellowRobotFields)]
 pub struct YellowRobotHost(pub Entity);
@@ -153,8 +154,8 @@ pub struct YellowRobotHost(pub Entity);
 #[relationship_target(relationship = YellowRobotHost, linked_spawn)]
 pub struct YellowRobotFields(Vec<Entity>);
 
-/// Can be added to a [Field](crate::fields::Field) to receive [Robot](crate::fields::robots::Robot) child entities for all
-/// blue robots from that host. Their rendering can be configured using [RenderSettings](crate::RenderSettings).
+/// Can be added to a [`Field`](crate::fields::Field) to receive [`Robot`](crate::fields::robots::Robot) child entities for all
+/// blue robots from that host. Their rendering can be configured using [`RenderSettings`](crate::RenderSettings).
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 #[relationship(relationship_target = BlueRobotFields)]
 pub struct BlueRobotHost(pub Entity);

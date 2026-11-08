@@ -10,7 +10,8 @@ pub fn ui_plugin(app: &mut App) {
     app.add_systems(PostUpdate, handle_immediate_activate);
 }
 
-/// Reference to the [Text] component for this UI element. Useful to avoid traversing the internal hierarchy of premade components like [FeathersCheckbox].
+/// Reference to the [`Text`] component for this UI element. Useful to avoid traversing the internal hierarchy
+/// of premade components like [`FeathersCheckbox`](bevy::feathers::controls::FeathersCheckbox).
 #[derive(Component, Clone, Copy)]
 #[relationship_target(relationship = TextOfComponent)]
 pub struct ComponentText(Entity);
@@ -18,7 +19,7 @@ pub struct ComponentText(Entity);
 #[relationship(relationship_target = ComponentText)]
 pub struct TextOfComponent(pub Entity);
 
-/// Inserts a child entity sorted by its [ComponentText].
+/// Inserts a child entity sorted by its [`ComponentText`].
 pub fn insert_child_sorted(child: Entity) -> impl EntityCommand {
     move |mut parent: EntityWorldMut| -> Result<(), BevyError> {
         let world = parent.world();
@@ -53,7 +54,7 @@ pub fn insert_child_sorted(child: Entity) -> impl EntityCommand {
     }
 }
 
-/// Triggers [Activate] when added, useful for simulate an immediate click when spawning a button.
+/// Triggers [`Activate`] when added, useful for simulate an immediate click when spawning a button.
 #[derive(Component, Clone, Copy, Default)]
 pub struct ImmediateActivate;
 
