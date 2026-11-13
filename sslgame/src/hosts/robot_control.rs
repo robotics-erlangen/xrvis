@@ -17,6 +17,7 @@ const ROT_SPEED: f32 = 3.0;
 /// Adds the [`RobotCommandProcessor`] to hosts to safely send robot commands and handles
 /// the [`RobotControlledByKeyboard`] and [`RobotControlledByGamepad`] components.
 pub fn robot_control_plugin(app: &mut App) {
+    app.register_required_components::<HostConnection, RobotCommandProcessor>();
     app.add_observer(on_gamepad_removed);
     app.add_systems(
         Update,
@@ -25,7 +26,6 @@ pub fn robot_control_plugin(app: &mut App) {
             process_keyboard_robot_control,
         ),
     );
-    app.register_required_components::<HostConnection, RobotCommandProcessor>();
     app.add_systems(PostUpdate, send_robot_command);
 }
 

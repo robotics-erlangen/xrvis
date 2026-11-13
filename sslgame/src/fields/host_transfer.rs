@@ -62,7 +62,7 @@ fn transfer_field_geometry(
             continue;
         };
 
-        if render_settings.field && (host_geometry.is_changed() || has_mesh) {
+        if render_settings.field && (host_geometry.is_changed() || !has_mesh) {
             commands.entity(entity).insert((
                 Mesh3d(mesh_assets.add(field_mesh(&host_geometry))),
                 MeshMaterial3d(white_material.opaque.clone()),

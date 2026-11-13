@@ -108,6 +108,9 @@ impl std::fmt::Display for Host {
 
 /// Handle to the IO task for an actively connected host. Create using [`Host::start_connection`], then insert
 /// it into the Host's entity to start updating related fields ([`GeometryHost`], [`YellowRobotHost`], ...).
+///
+/// Warning: Removing this component will not reset the received state, like [`FieldGeometry`] or [`GameState`].
+/// So it is possible that a host still has old state when reconnecting.
 #[derive(Component, Debug)]
 #[require(GameState, FieldGeometry)]
 pub struct HostConnection {
