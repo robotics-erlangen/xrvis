@@ -13,18 +13,18 @@ use bevy::ui::Checked;
 use bevy::ui_widgets::ValueChange;
 use derive_more::IntoIterator;
 use sslgame::hosts::visualizations::{
-    InactiveVisualization, VisualizationId, VisualizationInstance, VisualizationName,
-    VisualizationSourceId, VisualizationSourceName, VisualizationUsages,
+    ActiveVisualizationData, Visualization, VisualizationInstance, VisualizationSource,
+    VisualizationUsages,
 };
 use sslgame::hosts::{BlueRobotHost, HostConnection, YellowRobotHost};
 
 pub fn vis_inspector_plugin(app: &mut App) {
     app.add_observer(on_new_vis_source);
     app.add_observer(on_new_vis);
-    app.add_observer(on_source_name_insert);
-    app.add_observer(on_vis_name_insert);
-    app.add_observer(on_vis_inactive);
+    app.add_observer(on_source_insert);
+    app.add_observer(on_vis_insert);
     app.add_observer(on_vis_active);
+    app.add_observer(on_vis_inactive);
 }
 
 pub fn scene(field_entity: Entity) -> impl Scene {
@@ -183,41 +183,32 @@ fn host_tabs(
 
 fn vis_list_for_host(
     In((host_entity, field_entity)): In<(Entity, Entity)>,
-    q_source: Query<(
-        &VisualizationSourceId,
-        Option<&VisualizationSourceName>,
-        Entity,
-        Option<&Children>,
-    )>,
-    q_vis: Query<(
-        &VisualizationId,
-        Option<&VisualizationName>,
-        Option<&VisualizationUsages>,
-        Entity,
-    )>,
+    q_source: Query<(&VisualizationSource, Entity, Option<&Children>)>,
+    q_vis: Query<(&Visualization, Option<&VisualizationUsages>, Entity)>,
     q_children: Query<&Children>,
     q_parent: Query<&ChildOf>,
 ) -> impl Scene + use<> {
     let host_children = q_children.get(host_entity).into_iter().flatten();
     let source_ui_scenes = q_source
         .iter_many(host_children)
-        .sort_unstable_by::<Option<&VisualizationSourceName>>(|name_a, name_b| {
-            name_a
-                .map(|a| a.0.to_lowercase())
-                .cmp(&name_b.map(|b| b.0.to_lowercase()))
+        .sort_unstable_by::<&VisualizationSource>(|source_a, source_b| {
+            source_a
+                .name
+                .to_lowercase()
+                .cmp(&source_b.name.to_lowercase())
         })
         .filter_map(|r| r.ok())
-        .map(|(source_id, source_name, source_entity, source_children)| {
+        .map(|(source, source_entity, source_children)| {
             // Build the visualization list for this source
             let vis_ui_scenes = q_vis
                 .iter_many(source_children.into_iter().flatten())
-                .sort_unstable_by::<Option<&VisualizationName>>(|name_a, name_b| {
-                    name_a
-                        .map(|a| a.0.to_lowercase())
-                        .cmp(&name_b.map(|b| b.0.to_lowercase()))
+                .sort_unstable_by::<Option<&Visualization>>(|vis_a, vis_b| {
+                    vis_a
+                        .map(|a| a.name.to_lowercase())
+                        .cmp(&vis_b.map(|b| b.name.to_lowercase()))
                 })
                 .filter_map(|r| r.ok())
-                .map(|(vis_id, vis_name, vis_usages, vis_entity)| {
+                .map(|(vis, vis_usages, vis_entity)| {
                     let checked = q_parent
                         .iter_many(vis_usages.into_iter().flatten())
                         .matched()
@@ -228,18 +219,13 @@ fn vis_list_for_host(
                         }
                     });
                     bsn! {
-                        @vis_ui_scene(vis_entity, vis_id.clone(), vis_name.cloned())
+                        @vis_ui_scene(vis_entity, vis.clone())
                         @maybe_checked
                     }
                 })
                 .collect::<Vec<_>>();
 
-            source_ui_scene(
-                source_entity,
-                source_id.clone(),
-                source_name.cloned(),
-                vis_ui_scenes,
-            )
+            source_ui_scene(source_entity, source.clone(), vis_ui_scenes)
         })
         .collect::<Vec<_>>();
 
@@ -368,14 +354,9 @@ fn on_vis_toggled(
 
 fn source_ui_scene(
     source_entity: Entity,
-    source_id: VisualizationSourceId,
-    source_name: Option<VisualizationSourceName>,
+    source: VisualizationSource,
     vis_list: impl SceneList,
 ) -> impl Scene {
-    let label = source_name
-        .map(|name| name.0)
-        .unwrap_or_else(|| format!("Source {}", source_id.0));
-
     bsn! {
         #Root
         VisUiRepresentsEntity(source_entity)
@@ -400,7 +381,7 @@ fn source_ui_scene(
             Children [
                 @FeathersDisclosureToggle Checked on(on_disclosure_click)
                 --
-                @regular_text(label, px(14))  Node {padding: UiRect::top(px(3))} TextOfComponent(#Root)
+                @regular_text(source.name, px(14))  Node {padding: UiRect::top(px(3))} TextOfComponent(#Root)
             ]
             --
             @FeathersListView {
@@ -415,17 +396,13 @@ fn source_ui_scene(
 }
 
 fn on_new_vis_source(
-    vis_added: On<Add<VisualizationSourceId>>,
+    vis_added: On<Add<VisualizationSource>>,
     mut commands: Commands,
-    q_source: Query<(
-        &VisualizationSourceId,
-        Option<&VisualizationSourceName>,
-        &ChildOf,
-    )>,
+    q_source: Query<(&VisualizationSource, &ChildOf)>,
     q_host: Query<&RepresentedByVisUi, With<HostConnection>>,
     (q_parent, q_children): (Query<&ChildOf>, Query<&Children>),
 ) {
-    let (source_id, source_name, host_ref) = q_source.get(vis_added.entity).unwrap();
+    let (source, host_ref) = q_source.get(vis_added.entity).unwrap();
 
     let Ok(host_tabs_ref) = q_host.get(host_ref.0) else {
         // No relevant inspector -> Skip
@@ -440,8 +417,7 @@ fn on_new_vis_source(
         let new_entry = commands
             .spawn_scene(source_ui_scene(
                 vis_added.entity,
-                source_id.clone(),
-                source_name.cloned(),
+                source.clone(),
                 bsn_list! {},
             ))
             .id();
@@ -454,19 +430,12 @@ fn on_new_vis_source(
 
 // ======== New visualization ========
 
-fn vis_ui_scene(
-    vis_entity: Entity,
-    vis_id: VisualizationId,
-    vis_name: Option<VisualizationName>,
-) -> impl Scene {
-    let label = vis_name
-        .map(|name| name.0)
-        .unwrap_or_else(|| format!("Visualization {}", vis_id.0));
+fn vis_ui_scene(vis_entity: Entity, vis: Visualization) -> impl Scene {
     bsn! {
         #Root
         VisUiRepresentsEntity(vis_entity)
         @FeathersCheckbox {
-            @caption: bsn! { Text(label) ThemedText TextOfComponent(#Root) },
+            @caption: bsn! { Text({vis.name}) ThemedText TextOfComponent(#Root) },
         }
         Node {
             padding: UiRect::vertical(px(3)),
@@ -476,24 +445,20 @@ fn vis_ui_scene(
 }
 
 fn on_new_vis(
-    vis_added: On<Add<VisualizationId>>,
+    vis_added: On<Add<Visualization>>,
     mut commands: Commands,
-    q_vis: Query<(&VisualizationId, Option<&VisualizationName>, &ChildOf)>,
-    q_source: Query<&RepresentedByVisUi, With<VisualizationSourceId>>,
+    q_vis: Query<(&Visualization, &ChildOf)>,
+    q_source: Query<&RepresentedByVisUi, With<VisualizationSource>>,
     q_children: Query<&Children>,
 ) {
-    let (vis_id, vis_name, source_ref) = q_vis.get(vis_added.entity).unwrap();
+    let (vis, source_ref) = q_vis.get(vis_added.entity).unwrap();
 
     // FIXME: If this vis and its source are both added at the same time, it's possible that the observers for both are batched together and the commands for spawning the source ui might not be applied yet, causing this visualization to be lost
     for source_ui_entity in q_source.get(source_ref.0).into_iter().flatten() {
         let listview_entity = q_children.get(*source_ui_entity).unwrap()[1];
         let listview_content_entity = q_children.get(listview_entity).unwrap()[0];
         let new_entry = commands
-            .spawn_scene(vis_ui_scene(
-                vis_added.entity,
-                vis_id.clone(),
-                vis_name.cloned(),
-            ))
+            .spawn_scene(vis_ui_scene(vis_added.entity, vis.clone()))
             .id();
 
         commands
@@ -504,13 +469,13 @@ fn on_new_vis(
 
 // ======== Name updates ========
 
-fn on_source_name_insert(
-    name_inserted: On<Insert<VisualizationSourceName>>,
+fn on_source_insert(
+    name_inserted: On<Insert<VisualizationSource>>,
     mut commands: Commands,
-    q_source: Query<(&VisualizationSourceName, &RepresentedByVisUi)>,
+    q_source: Query<(&VisualizationSource, &RepresentedByVisUi)>,
     q_entry: Query<(&ComponentText, &ChildOf)>,
 ) {
-    let Ok((new_name, ui_ref)) = q_source.get(name_inserted.entity) else {
+    let Ok((new_source, ui_ref)) = q_source.get(name_inserted.entity) else {
         // Failed either because this source is not shown on any inspector, or because the component was
         // inserted at spawn and the command creating the UI (including this name) has not been applied yet.
         // Skipping the update is correct in both cases.
@@ -520,7 +485,7 @@ fn on_source_name_insert(
         let (label_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
             .entity(*label_ref.collection())
-            .insert(Text(new_name.0.clone()));
+            .insert(Text(new_source.name.clone()));
 
         commands.entity(*ui_entity).remove::<ChildOf>();
         commands
@@ -529,13 +494,13 @@ fn on_source_name_insert(
     }
 }
 
-fn on_vis_name_insert(
-    name_inserted: On<Insert<VisualizationName>>,
+fn on_vis_insert(
+    name_inserted: On<Insert<Visualization>>,
     mut commands: Commands,
-    q_vis: Query<(&VisualizationName, &RepresentedByVisUi)>,
+    q_vis: Query<(&Visualization, &RepresentedByVisUi)>,
     q_entry: Query<(&ComponentText, &ChildOf)>,
 ) {
-    let Ok((new_name, ui_ref)) = q_vis.get(name_inserted.entity) else {
+    let Ok((new_vis, ui_ref)) = q_vis.get(name_inserted.entity) else {
         // Failed either because this visualization is not shown on any inspector, or because the component
         // was inserted at spawn and the command creating the UI (including this name) has not been applied yet.
         // Skipping the update is correct in both cases.
@@ -545,7 +510,7 @@ fn on_vis_name_insert(
         let (caption_ref, container_ref) = q_entry.get(*ui_entity).unwrap();
         commands
             .entity(*caption_ref.collection())
-            .insert(Text(new_name.0.clone()));
+            .insert(Text(new_vis.name.clone()));
 
         commands.entity(*ui_entity).remove::<ChildOf>();
         commands
@@ -556,24 +521,8 @@ fn on_vis_name_insert(
 
 // ======== Inactive markings ========
 
-fn on_vis_inactive(
-    vis_inactive: On<Add<InactiveVisualization>>,
-    mut commands: Commands,
-    q_vis: Query<&RepresentedByVisUi>,
-    q_text_ref: Query<&ComponentText>,
-) {
-    for ui_entity in q_vis.get(vis_inactive.entity).into_iter().flatten() {
-        let label_ref = q_text_ref.get(*ui_entity).unwrap();
-        // PropagateOver temporarily disables text color inheritance
-        commands
-            .entity(*label_ref.collection())
-            .insert(PropagateOver::<TextColor>::default())
-            .insert(ThemeTextColor(feathers::tokens::CHECKBOX_TEXT_DISABLED));
-    }
-}
-
 fn on_vis_active(
-    vis_active: On<Remove<InactiveVisualization>>,
+    vis_active: On<Add<ActiveVisualizationData>>,
     mut commands: Commands,
     q_vis: Query<&RepresentedByVisUi>,
     q_text_ref: Query<&ComponentText>,
@@ -585,5 +534,21 @@ fn on_vis_active(
             .entity(*label_ref.collection())
             .try_remove::<ThemeTextColor>()
             .try_remove::<PropagateOver<TextColor>>();
+    }
+}
+
+fn on_vis_inactive(
+    vis_inactive: On<Remove<ActiveVisualizationData>>,
+    mut commands: Commands,
+    q_vis: Query<&RepresentedByVisUi>,
+    q_text_ref: Query<&ComponentText>,
+) {
+    for ui_entity in q_vis.get(vis_inactive.entity).into_iter().flatten() {
+        let label_ref = q_text_ref.get(*ui_entity).unwrap();
+        // PropagateOver temporarily disables text color inheritance
+        commands
+            .entity(*label_ref.collection())
+            .insert(PropagateOver::<TextColor>::default())
+            .insert(ThemeTextColor(feathers::tokens::CHECKBOX_TEXT_DISABLED));
     }
 }

@@ -12,7 +12,7 @@ use bevy_mod_openxr::resources::OxrSessionConfig;
 use bevy_mod_openxr::types::{AppInfo, EnvironmentBlendMode, Version};
 use sslgame::fields::Field;
 use sslgame::hosts::visualizations::{
-    AllHostVisualizations, VisualizationInstance, VisualizationName, VisualizationUsages,
+    AllHostVisualizations, Visualization, VisualizationInstance, VisualizationUsages,
 };
 use sslgame::hosts::{
     BallHost, BlueRobotHost, GameStateHost, GeometryHost, Host, HostConnection, YellowRobotHost,
@@ -130,16 +130,16 @@ fn spawn_all_visualizations(
     mut commands: Commands,
     q_fields: Query<(&YellowRobotHost, &BlueRobotHost, Entity), With<Field>>,
     q_hosts: Query<Option<&AllHostVisualizations>, With<HostConnection>>,
-    q_new_visualizations: Query<(&VisualizationName, Entity), Without<VisualizationUsages>>,
+    q_new_visualizations: Query<(&Visualization, Entity), Without<VisualizationUsages>>,
 ) {
     for (yellow_host_ref, blue_host_ref, field_entity) in q_fields {
         for host_entity in yellow_host_ref.0.iter().chain(blue_host_ref.0.iter()) {
             let host_vis_list = q_hosts.get(host_entity).unwrap();
-            for (vis_name, vis_entity) in q_new_visualizations
+            for (vis, vis_entity) in q_new_visualizations
                 .iter_many(host_vis_list.into_iter().flatten())
                 .matched()
             {
-                let name_lower = vis_name.0.to_ascii_lowercase();
+                let name_lower = vis.name.to_ascii_lowercase();
                 if !name_lower.contains("zone") && !name_lower.contains("obstacle") {
                     commands.spawn((VisualizationInstance(vis_entity), ChildOf(field_entity)));
                 }

@@ -1,7 +1,7 @@
 use crate::mesh_gen::{CustomMeshBuilder, bevy_col, circle_vertices, with_col};
 use crate::proto;
+use crate::proto::VisShape;
 use crate::proto::vis_shape::Geom;
-use crate::proto::{VisShape, Visualization};
 use bevy::mesh::Mesh;
 use tracing::warn;
 
@@ -9,23 +9,16 @@ const Z_HEIGHT: f32 = 0.01;
 const DEFAULT_LINE_WIDTH: f32 = 0.01;
 
 /// Builds a single mesh containing all geometry from the visualization list.
-pub fn simple_vis_mesh(vis_list: &[&Visualization]) -> Mesh {
+pub fn simple_vis_mesh<'a>(shape_list: impl IntoIterator<Item = &'a VisShape>) -> Mesh {
     let mut mesh = CustomMeshBuilder::new();
 
-    for (vis_id, part) in vis_list
-        .iter()
-        .flat_map(|v| v.shape.iter().map(|p| (&v.id, p)))
-    {
-        match part.geom.as_ref() {
-            Some(Geom::Circle(_)) => circle_vis(&mut mesh, part),
-            Some(Geom::Polygon(poly)) if !poly.point.is_empty() => polygon_vis(&mut mesh, part),
-            Some(Geom::Path(path)) if !path.point.is_empty() => path_vis(&mut mesh, part),
-            other => {
-                // TODO: Print the string name of the broken visualization
-                warn!(
-                    "Invalid visualization part in {vis_id}: {}",
-                    other.map(|_| "Empty geometry").unwrap_or("No geometry")
-                );
+    for shape in shape_list {
+        match shape.geom.as_ref() {
+            Some(Geom::Circle(_)) => circle_vis(&mut mesh, shape),
+            Some(Geom::Polygon(poly)) if !poly.point.is_empty() => polygon_vis(&mut mesh, shape),
+            Some(Geom::Path(path)) if !path.point.is_empty() => path_vis(&mut mesh, shape),
+            _ => {
+                // No geometry for this shape
                 continue;
             }
         }

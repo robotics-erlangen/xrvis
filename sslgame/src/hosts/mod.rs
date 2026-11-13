@@ -1,6 +1,6 @@
 use crate::fields::robots::update_world_state;
 use crate::hosts::data::{FieldGeometry, GameState};
-use crate::hosts::visualizations::{update_visualization_names, update_visualizations};
+use crate::hosts::visualizations::{update_visualization_model, update_visualizations};
 use crate::network_tasks;
 use crate::network_tasks::UpdatePacket;
 use crate::proto::udp_stream_request::UdpStream;
@@ -204,10 +204,10 @@ fn receive_host_packets(
                         );
                     }
                 }
-                UpdatePacket::VisMappings(new_vis_mappings) => {
+                UpdatePacket::VisModel(new_vis_model) => {
                     commands.run_system_cached_with(
-                        update_visualization_names,
-                        (host_entity, new_vis_mappings),
+                        update_visualization_model,
+                        (host_entity, new_vis_model),
                     );
                 }
                 UpdatePacket::WorldState(new_world_state) => {

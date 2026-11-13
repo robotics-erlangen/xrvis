@@ -1,43 +1,52 @@
 use crate::hosts::{Host, HostConnection};
 use crate::proto;
 use crate::proto::vis_shape::Geom;
-use crate::proto::{VisMappings, Visualization, VisualizationUpdate};
 use bevy::prelude::*;
 use derive_more::IntoIterator;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 pub fn vis_plugin(app: &mut App) {
     app.add_systems(PostUpdate, send_vis_selection);
 }
 
-/// Component that stores the latest visualization name mappings for a host, so that
-/// new visualizations don't have to wait for a new packet to get their name.
-#[derive(Component, Clone, Debug, PartialEq)]
-pub struct VisualizationNameMappings(pub VisMappings);
-
 // ======== Visualization sources ========
-/// The unique ID of this visualization source. Maps to a [`VisualizationSourceName`] through the [`VisualizationNameMappings`].
+/// ECS component for [`proto::VisSourceSkeleton`], managed by [`update_visualization_model`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
-pub struct VisualizationSourceId(pub u32);
-/// The human-readable name of a [`VisualizationSourceId`]. Created automatically from the host's [`VisualizationNameMappings`].
-#[derive(Component, Clone, Debug, PartialEq)]
-#[component(immutable)]
-pub struct VisualizationSourceName(pub String);
+pub struct VisualizationSource {
+    pub name: String,
+}
+impl VisualizationSource {
+    fn new(name: String) -> Self {
+        Self { name }
+    }
+}
 
-// ======== Visualizations ========
-/// The ID of this visualization, unique within its [`VisualizationSourceId`]. Maps to a [`VisualizationName`] through the [`VisualizationNameMappings`].
+/// ECS component for [`proto::VisSkeleton`], managed by [`update_visualization_model`].
+/// This is just an identifier, the actual shape data is stored in [`ActiveVisualizationData`].
 #[derive(Component, Clone, Debug, PartialEq)]
 #[component(immutable)]
-pub struct VisualizationId(pub u32);
-/// The human-readable name of a [`VisualizationId`]. Created automatically from the host's [`VisualizationNameMappings`].
+pub struct Visualization {
+    pub id: u32,
+    pub name: String,
+}
+impl Visualization {
+    fn new(id: u32, name: String) -> Self {
+        Self { id, name }
+    }
+}
+
+/// The latest shape data for an active [`Visualization`], used to generate the mesh to display on fields.
+///
+/// A visualization is considered active if it contains at least one shape in this frame. But the
+/// [`proto::VisualizationFilter`] makes this a bit more complicated, as it can cull shapes for
+/// visualizations that are still active on the host.
+///
+/// So this component encodes three states:
+/// - Present and non-empty: The visualization is active and unfiltered/used
+/// - Present and empty: The visualization is active but filtered/unused
+/// - Absent: The visualization is inactive
 #[derive(Component, Clone, Debug, PartialEq)]
-#[component(immutable)]
-pub struct VisualizationName(pub String);
-/// The latest data for a [`VisualizationId`]. Used to generate the mesh to display on fields.
-#[derive(Component, Clone, Debug, PartialEq)]
-pub struct VisualizationData(pub Visualization);
+pub struct ActiveVisualizationData(pub Vec<proto::VisShape>);
 
 /// Vis-side counterpart to [`AllHostVisualizations`]. Direct link to the host of the visualization, skipping the source entity.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
@@ -53,33 +62,25 @@ pub struct AllHostVisualizations(#[into_iterator(owned, ref, ref_mut)] Vec<Entit
 #[relationship(relationship_target = VisualizationUsages)]
 #[require(Transform)]
 pub struct VisualizationInstance(pub Entity);
-/// Host-side counterpart to [`VisualizationInstance`]. Contains all entities that should be updated from this entity's [`VisualizationData`].
+/// Host-side counterpart to [`VisualizationInstance`]. Contains all entities that should be updated from this entity's [`ActiveVisualizationData`].
 #[derive(Component, IntoIterator, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = VisualizationInstance, linked_spawn)]
 pub struct VisualizationUsages(#[into_iterator(owned, ref, ref_mut)] Vec<Entity>);
 
-/// Marks that a visualization was not included in the last [`VisualizationUpdate`].
-#[derive(Component)]
-pub struct InactiveVisualization;
-
-/// Adds a [`VisualizationName`]/[`VisualizationSourceName`] to each [`VisualizationId`]/[`VisualizationSourceId`]
-/// that is present in the provided mappings, for a single host.
-pub(crate) fn update_visualization_names(
-    In((host_entity, vis_mappings)): In<(Entity, VisMappings)>,
+/// Encodes a [`proto::VisModel`] for a single host into the ecs.
+///
+/// The generated structure looks like this:\
+/// \- ([`Host`], [`HostConnection`], Option<[`AllHostVisualizations`]>)\
+/// | \- [`VisualizationSource`]\
+/// | | \- ([`Visualization`], Option<[`ActiveVisualizationData`]>, [`VisualizationFromHost`])
+pub(crate) fn update_visualization_model(
+    In((host_entity, vis_model)): In<(Entity, proto::VisModel)>,
     mut commands: Commands,
-    mut q_hosts: Query<
-        (Option<&mut VisualizationNameMappings>, Option<&Children>),
-        With<HostConnection>,
-    >,
-    mut q_vis_sources: Query<(
-        &VisualizationSourceId,
-        Has<VisualizationSourceName>,
-        Option<&Children>,
-        Entity,
-    )>,
-    mut q_visualizations: Query<(&VisualizationId, Has<VisualizationName>, Entity)>,
+    mut q_hosts: Query<Option<&Children>, With<HostConnection>>,
+    mut q_vis_sources: Query<(&VisualizationSource, Option<&Children>, Entity)>,
+    mut q_visualizations: Query<(&Visualization, Entity)>,
 ) {
-    let (cached_mappings, source_entities) = match q_hosts.get_mut(host_entity) {
+    let source_entities = match q_hosts.get_mut(host_entity) {
         Ok(c) => c,
         Err(e) => {
             error!(
@@ -89,68 +90,82 @@ pub(crate) fn update_visualization_names(
         }
     };
 
+    let mut new_source_list = vis_model.groups;
+
+    // Update/Remove existing sources
     let mut source_iter = q_vis_sources.iter_many_mut(source_entities.into_iter().flatten());
-    while let Some(Ok((source_id, has_source_name, vis_entities, source_entity))) =
-        source_iter.fetch_next()
-    {
-        // Update source name
-        if let Some(new_name) = vis_mappings.source.get(&source_id.0) {
-            commands
-                .entity(source_entity)
-                .insert_if_neq(VisualizationSourceName(new_name.clone()));
-        } else if has_source_name {
-            commands
-                .entity(source_entity)
-                .remove::<VisualizationSourceName>();
+    while let Some(Ok((source, vis_entities, source_entity))) = source_iter.fetch_next() {
+        // Get all new messages for this source. There should only be one, but that isn't actually
+        // enforced in the protocol to make minimal host implementations easier.
+        let mut source_skeletons = new_source_list.extract_if(.., |s| s.name == source.name);
+
+        // Explicit handling for the first element to short-circuit without collecting into a vec
+        let Some(first) = source_skeletons.next() else {
+            commands.entity(source_entity).despawn();
+            continue;
+        };
+
+        let mut vis_skeletons: Vec<_> = std::iter::once(first)
+            .chain(source_skeletons)
+            .flat_map(|a| a.visualizations)
+            .collect();
+
+        // Update/Remove existing visualizations
+        let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
+        while let Some(Ok((vis_component, vis_entity))) = vis_iter.fetch_next() {
+            if let Some(vis_skeleton) = vis_skeletons
+                .extract_if(.., |v| v.id == vis_component.id)
+                .next()
+            {
+                commands.entity(vis_entity).insert_if_neq(Visualization {
+                    id: vis_skeleton.id,
+                    name: vis_skeleton.name,
+                });
+            } else {
+                commands.entity(vis_entity).despawn();
+                continue;
+            }
         }
 
-        // Update visualization names
-        let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
-        while let Some(Ok((vis_id, has_vis_name, vis_entity))) = vis_iter.fetch_next() {
-            if let Some(new_name) = vis_mappings.name.get(&vis_id.0) {
-                commands
-                    .entity(vis_entity)
-                    .insert_if_neq(VisualizationName(new_name.clone()));
-            } else if has_vis_name {
-                commands.entity(vis_entity).remove::<VisualizationName>();
-            }
+        // Spawn new visualizations
+        for vis_skeleton in vis_skeletons {
+            commands.spawn((
+                Visualization::new(vis_skeleton.id, vis_skeleton.name),
+                VisualizationFromHost(host_entity),
+                ChildOf(source_entity),
+            ));
         }
     }
 
-    // Store the mappings so that new visualizations can immediately spawn with their name
-    match cached_mappings {
-        Some(mut m) => *m = VisualizationNameMappings(vis_mappings.clone()),
-        None => {
-            commands
-                .entity(host_entity)
-                .insert(VisualizationNameMappings(vis_mappings));
-        }
+    // Spawn new sources
+    for new_source in new_source_list {
+        commands
+            .spawn((
+                VisualizationSource::new(new_source.name),
+                ChildOf(host_entity),
+            ))
+            .with_children(|spawner| {
+                for vis_skeleton in new_source.visualizations {
+                    spawner.spawn((
+                        Visualization::new(vis_skeleton.id, vis_skeleton.name),
+                        VisualizationFromHost(host_entity),
+                    ));
+                }
+            });
     }
 }
 
-/// Updates the visualization entities for a single host. This system only provides the
-/// [`VisualizationId`] and the [`VisualizationData`], the names are managed by [`update_visualization_names`].
-/// Also note that hosts with an active [`proto::VisualizationFilter`](crate::proto::VisualizationFilter)
-/// won't provide data for excluded entities, but they will still be present with an id.
-/// The generated structure looks like this:\
-/// \- ([`Host`], [`HostConnection`])\
-/// | \- ([`VisualizationSourceId`], Option<[`VisualizationSourceName`]>)\
-/// | | \- ([`VisualizationId`], Option<[`VisualizationName`]>, Option<[`VisualizationData`]>)
+/// Updates the visualization data for a single host. This system only manages the [`ActiveVisualizationData`]
+/// for pre-existing entities, their creation is handled by [`update_visualization_model`].
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_visualizations(
-    In((host_entity, mut vis_update)): In<(Entity, VisualizationUpdate)>,
+    In((host_entity, mut vis_update)): In<(Entity, proto::VisualizationUpdate)>,
     mut commands: Commands,
-    q_hosts: Query<(Option<&VisualizationNameMappings>, Option<&Children>), With<HostConnection>>,
-    q_vis_sources: Query<(&VisualizationSourceId, Entity, Option<&Children>)>,
-    mut q_visualizations: Query<(
-        &VisualizationId,
-        Option<&mut VisualizationData>,
-        Option<&VisualizationUsages>,
-        Entity,
-    )>,
+    q_hosts: Query<Option<&AllHostVisualizations>, With<HostConnection>>,
+    mut q_visualizations: Query<(&Visualization, Option<&mut ActiveVisualizationData>, Entity)>,
 ) {
-    let (cached_names, source_entities) = match q_hosts.get(host_entity) {
-        Ok((m, c)) => (m, c.into_iter().flatten()),
+    let vis_entities = match q_hosts.get(host_entity) {
+        Ok(v) => v,
         Err(e) => {
             error!("Failed to fetch host entity {host_entity:?} for update_visualizations: {e}");
             return;
@@ -159,11 +174,7 @@ pub(crate) fn update_visualizations(
 
     // Convert from the vision coordinate system (right-handed, z up, x towards blue goal, +x forward)
     // to bevy's coordinate system (right-handed, y up, x towards blue goal, -z forward) with y and z swapped
-    for vis in vis_update
-        .visualization_set
-        .iter_mut()
-        .flat_map(|set| &mut set.visualization)
-    {
+    for vis in vis_update.active_vis.iter_mut() {
         for part in &mut vis.shape {
             match &mut part.geom {
                 Some(Geom::Circle(c)) => {
@@ -191,149 +202,63 @@ pub(crate) fn update_visualizations(
             group_count: 1,
         });
 
-    let mut new_source_list = vis_update.visualization_set;
+    let mut new_vis_list = vis_update.active_vis;
 
-    // Update the existing sources
-    for (source_id, source_entity, vis_entities) in
-        q_vis_sources.iter_many(source_entities).matched()
-    {
-        // Get all new messages for this source. There should only be one, but that isn't actually
-        // enforced in the protocol to make minimal host implementations easier.
-        let new_source = new_source_list.extract_if(.., |vs| vs.source == source_id.0);
-        // Sources without messages are kept, but all their inner visualizations will be marked as inactive
-
-        // Merge the visualization messages from all the source messages
-        let mut new_vis_map: HashMap<u32, Visualization> = HashMap::new();
-        for vis in new_source.flat_map(|vs| vs.visualization) {
-            match new_vis_map.entry(vis.id) {
-                Entry::Occupied(mut entry) => {
-                    let acc = entry.get_mut();
-                    acc.shape.extend(vis.shape);
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(vis);
-                }
-            }
+    let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
+    while let Some(Ok((vis, vis_data, vis_entity))) = vis_iter.fetch_next() {
+        // Skip if the group doesn't match
+        if vis.id % group_selector.group_count != group_selector.group {
+            continue;
         }
 
-        // Update the existing visualizations in this source
-        let mut vis_iter = q_visualizations.iter_many_mut(vis_entities.into_iter().flatten());
-        while let Some(Ok((vis_id, vis_data, vis_usages, vis_entity))) = vis_iter.fetch_next() {
-            // Skip if the group doesn't match
-            if vis_id.0 % group_selector.group_count != group_selector.group {
-                continue;
-            }
+        let shapes: Vec<_> = new_vis_list
+            .extract_if(.., |v| v.id == vis.id)
+            .flat_map(|v| v.shape)
+            .collect();
 
-            let Some(new_vis) = new_vis_map.remove(&vis_id.0) else {
-                // No messages for this vis -> mark inactive
-                commands
-                    .entity(vis_entity)
-                    .insert(InactiveVisualization)
-                    .remove::<VisualizationData>();
-                continue;
-            };
+        if shapes.is_empty() && !vis_update.hidden_active_vis.contains(&vis.id) {
             commands
                 .entity(vis_entity)
-                .remove::<InactiveVisualization>();
+                .remove::<ActiveVisualizationData>();
+            continue;
+        }
 
-            // Update vis data, but only if there is at least one usage
-            let has_usage = vis_usages.is_some_and(|u| !u.0.is_empty());
-            match (vis_data, has_usage) {
-                (Some(mut vis_data), true) => {
-                    // Update existing data
-                    vis_data.set_if_neq(VisualizationData(new_vis));
-                }
-                (Some(_), false) => {
-                    // Remove data because the visualization is currently unused
-                    commands.entity(vis_entity).remove::<VisualizationData>();
-                }
-                (None, true) => {
-                    // Insert new data
-                    commands
-                        .entity(vis_entity)
-                        .insert(VisualizationData(new_vis));
-                }
-                (None, false) => {}
+        match vis_data {
+            Some(mut vis_data) => {
+                vis_data.set_if_neq(ActiveVisualizationData(shapes));
+            }
+            None => {
+                commands
+                    .entity(vis_entity)
+                    .insert(ActiveVisualizationData(shapes));
             }
         }
-
-        // Spawn new entities for the remaining visualizations
-        for new_vis in new_vis_map.into_values() {
-            let name = cached_names.and_then(|n| n.0.name.get(&new_vis.id));
-            // The name is spawned "atomically" with the id so that On<Added, VisId> observers see both
-            let mut e = if let Some(name) = name {
-                commands.spawn((
-                    VisualizationId(new_vis.id),
-                    VisualizationName(name.clone()),
-                    VisualizationFromHost(host_entity),
-                    ChildOf(source_entity),
-                ))
-            } else {
-                commands.spawn((
-                    VisualizationId(new_vis.id),
-                    VisualizationFromHost(host_entity),
-                    ChildOf(source_entity),
-                ))
-            };
-            // Not having shapes means that the visualization was probably excluded by a VisualizationFilter
-            if !new_vis.shape.is_empty() {
-                e.insert(VisualizationData(new_vis));
-            }
-        }
-    }
-
-    // Spawn the remaining sources
-    while let Some(next_source) = new_source_list.first() {
-        let next_source_id = next_source.source;
-        new_source_list.retain(|vs| vs.source != next_source_id);
-
-        let name = cached_names.and_then(|n| n.0.source.get(&next_source_id));
-        // The name is spawned "atomically" with the id so that On<Added, SourceId> observers see both
-        if let Some(name) = name {
-            commands.spawn((
-                VisualizationSourceId(next_source_id),
-                VisualizationSourceName(name.clone()),
-                ChildOf(host_entity),
-            ));
-        } else {
-            commands.spawn((VisualizationSourceId(next_source_id), ChildOf(host_entity)));
-        }
-
-        // Visualizations for the new source will be filled in with the next update to reduce code duplication
     }
 }
 
-/// Sends a [`proto::VisualizationFilter`](crate::proto::VisualizationFilter) to the host, based on which visualization entities have [`VisualizationUsages`].
+/// Sends a [`proto::VisualizationFilter`](proto::VisualizationFilter) to the host, based on which visualization entities have [`VisualizationUsages`].
 fn send_vis_selection(
-    q_hosts: Query<(&Host, &HostConnection, &Children)>,
-    q_vis_sources: Query<(&VisualizationSourceId, &Children)>,
-    q_visualizations: Query<(&VisualizationId, Ref<VisualizationUsages>)>,
+    q_hosts: Query<(&Host, &HostConnection, &AllHostVisualizations)>,
+    q_visualizations: Query<(&Visualization, Ref<VisualizationUsages>)>,
     mut removed_usages: RemovedComponents<VisualizationUsages>,
 ) {
     let last_usage_removed = removed_usages.read().collect::<Vec<_>>();
 
-    for (host, host_connection, source_entities) in q_hosts {
+    for (host, host_connection, vis_entities) in q_hosts {
         let mut host_changed = false;
 
         let mut filter = proto::VisualizationFilter::default();
-        for (source_id, vis_entities) in q_vis_sources.iter_many(source_entities).matched() {
-            if vis_entities.iter().any(|e| last_usage_removed.contains(&e)) {
+
+        if vis_entities.iter().any(|e| last_usage_removed.contains(&e)) {
+            host_changed = true;
+        }
+        for (vis, vis_usages) in q_visualizations.iter_many(vis_entities).matched() {
+            // Empty VisualizationUsages are automatically removed by the relationship hooks
+            if vis_usages.is_changed() {
                 host_changed = true;
             }
 
-            for (vis_id, vis_usages) in q_visualizations.iter_many(vis_entities).matched() {
-                // Empty VisualizationUsages are automatically removed by the relationship hooks
-                if vis_usages.is_changed() {
-                    host_changed = true;
-                }
-
-                filter.allowed_visualizations.push(
-                    proto::visualization_filter::VisualizationFilterEntry {
-                        source_id: Some(source_id.0),
-                        vis_id: Some(vis_id.0),
-                    },
-                );
-            }
+            filter.allowed_visualizations.push(vis.id);
         }
 
         if host_changed {

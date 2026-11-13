@@ -9,7 +9,6 @@ import "remote_status.proto";
 // All coordinates use the same global coordinate system, like vision coordinates but in meters instead of millimeters.
 // That means: (right-handed, z up, x towards blue goal, +x forward)
 // Robot-local coordinates keep that convention -> right-handed, +x forward
-// TODO: More protocol documentation
 
 // Root packet: Client -ws> Host
 message WsRequest {
@@ -26,7 +25,7 @@ message WsPacket {
     oneof content {
         FieldGeometry geom = 1;
         GameState game_state = 2;
-        VisMappings vis_mappings = 3;
+        VisModel vis_model = 3;
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::fields::Field;
 use crate::hosts::data::{FieldGeometry, GameState};
-use crate::hosts::visualizations::{VisualizationData, VisualizationInstance};
+use crate::hosts::visualizations::{ActiveVisualizationData, VisualizationInstance};
 use crate::hosts::{GameStateHost, GeometryHost, HostConnection, UpdateHostDataSystemSet};
 use crate::mesh_gen::field::field_mesh;
 use crate::mesh_gen::vis::visualization_mesh;
@@ -71,14 +71,14 @@ fn transfer_field_geometry(
     }
 }
 
-/// Updates the mesh of all [`VisualizationInstance`]s based on changes to their referenced [`VisualizationData`]
+/// Updates the mesh of all [`VisualizationInstance`]s based on changes to their referenced [`ActiveVisualizationData`].
 fn update_visualization_instances(
     mut commands: Commands,
     render_settings: Res<RenderSettings>,
     material: Res<DefaultMaterial>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
     (q_vis_data, q_vis_instances): (
-        Query<Ref<VisualizationData>>,
+        Query<Ref<ActiveVisualizationData>>,
         Query<(&VisualizationInstance, Entity)>,
     ),
 ) {
@@ -88,17 +88,13 @@ fn update_visualization_instances(
             continue;
         };
 
-        if vis_data.is_changed() && render_settings.visualizations {
-            let visualization = &vis_data.0;
+        if vis_data.is_changed() && render_settings.visualizations && !vis_data.0.is_empty() {
+            let vis_mesh = mesh_assets.add(visualization_mesh(&vis_data.0));
 
-            if !visualization.shape.is_empty() {
-                let vis_mesh = mesh_assets.add(visualization_mesh(&[visualization]));
-
-                commands.entity(vis_instance_entity).insert((
-                    Mesh3d(vis_mesh),
-                    MeshMaterial3d(material.translucent.clone()),
-                ));
-            }
+            commands.entity(vis_instance_entity).insert((
+                Mesh3d(vis_mesh),
+                MeshMaterial3d(material.translucent.clone()),
+            ));
         }
     }
 }

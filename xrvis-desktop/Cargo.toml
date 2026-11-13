@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [features]
 3d-panels = []
+debug = ["bevy/debug"]
 
 [dependencies]
 bevy = { workspace = true, features = ["bevy_feathers", "bevy_dev_tools", "render_dev_tools"] }

@@ -236,7 +236,7 @@ pub async fn host_discovery_task(
 pub enum UpdatePacket {
     FieldGeom(FieldGeometry),
     GameState(GameState),
-    VisMappings(VisMappings),
+    VisModel(VisModel),
     WorldState(WorldState),
     VisualizationUpdate(VisualizationUpdate),
 }
@@ -246,7 +246,7 @@ impl From<ws_packet::Content> for UpdatePacket {
         match packet {
             ws_packet::Content::Geom(inner) => Self::FieldGeom(inner),
             ws_packet::Content::GameState(inner) => Self::GameState(inner),
-            ws_packet::Content::VisMappings(inner) => Self::VisMappings(inner),
+            ws_packet::Content::VisModel(inner) => Self::VisModel(inner),
         }
     }
 }

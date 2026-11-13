@@ -25,12 +25,6 @@ message TeamState {
     optional uint32 red_cards = 5;
 }
 
-// Human-readable names for the ids used in regular visualization updates
-message VisMappings {
-    map<uint32, string> source = 1;
-    map<uint32, string> name = 2;
-}
-
 // ==== World State ====
 
 message WorldState {
@@ -56,12 +50,41 @@ message Ball {
 
 // ==== Visualizations ====
 
+// Structural model of all currently known visualizations from all sources
+message VisModel {
+    repeated VisSourceSkeleton groups = 1;
+}
+
+// Structural information about a single visualization source
+message VisSourceSkeleton {
+    required string name = 1;
+    // All currently known visualizations for this source
+    repeated VisSkeleton visualizations = 2;
+}
+
+// Structural information about a single visualization
+message VisSkeleton {
+    // Id of this visualization. Uniquely identifies it across all sources, even against similar names.
+    // Having this id be fully unique has multiple advantages for the regular [VisualizationUpdate]s:
+    // - Only one id is required to associate a [VisualizationData] with its [VisSkeleton], saving a bit of space
+    // - If the id for a given name would be the same from all sources, then they would all end up in the same
+    //  update group, and the [VisGroupSelector] would not be able to split a big visualization across multiple packets.
+    //  Having them be fully unique means that the parts from different sources can end up in different groups,
+    //  spreading the network load more evenly.
+    required uint32 id = 1;
+    required string name = 2;
+}
+
+// Regular update containing filtered data for the latest [VisualizationModel]
 message VisualizationUpdate {
     // The visualization group this update applies to. No vis group means the update includes all visualizations.
     // Used to split vis updates across multiple frames to reduce data sizes.
     optional VisGroupSelector group_selector = 1;
-    // All current visualizations in this group. Any old visualizations matching the group selector will be removed.
-    repeated VisualizationSet visualization_set = 2;
+    // Detailed shape data for all active visualizations that pass the [VisualizationFilter].
+    repeated VisualizationData active_vis = 2;
+    // Compact list of all active visualizations that failed the [VisualizationFilter].
+    // Used to highlight active visualizations in the UI, even if they aren't selected.
+    repeated uint32 hidden_active_vis = 3 [packed = true];
 }
 
 // An update packet with a group selector contains all visualizations where `vis_id % group_count == group`
@@ -72,17 +95,9 @@ message VisGroupSelector {
     required uint32 group_count = 2;
 }
 
-// Collection of visualizations from a single source
-message VisualizationSet {
-    // Shorthand source id, a human readable name is included in the VisMappings (e.g. strategy_blue, autoref, ...).
-    required uint32 source = 1;
-    repeated Visualization visualization = 2;
-}
-
-message Visualization {
-    // Shorthand vis id, a human readable name is included in the VisMappings. Also used to assign this visualization to a group.
+message VisualizationData {
+    // Compact id of this visualization, referencing the latest [VisModel]
     required uint32 id = 1;
-    // Standard visualisation shapes
     repeated VisShape shape = 2;
 }
 
