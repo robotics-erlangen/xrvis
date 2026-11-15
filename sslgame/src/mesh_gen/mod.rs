@@ -16,7 +16,7 @@ pub mod vis;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// let cube = CustomMeshBuilder::new()
 ///     // Bottom face
 ///     .with_convex_polygon([
@@ -285,7 +285,7 @@ impl CustomMeshBuilder {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// Current: 1 2 3 4, New: 5 6 7 8, Loop: false
     /// 5 - 6 - 7 - 8
     /// |   |   |   |

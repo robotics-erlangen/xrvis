@@ -2,7 +2,7 @@ use crate::depth_mask_material::DepthMaskMaterial;
 use crate::fields::Team;
 use crate::hosts::{BallFields, BlueRobotFields, Host, YellowRobotFields};
 use crate::proto::WorldState;
-use crate::transform_filter::{TransformFilter, apply_filtered_transform};
+use crate::transform_filter::TransformFilter;
 use crate::{RenderSettings, RobotRenderSettings, proto};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::Color;
@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
-// TODO: Refactor all of this. The plugin does setup for unrelated code like transform filtering, and the rest is just one huge function that behaves differently from everything else in host_transfer.
+// TODO: Refactor all of this. Its just one huge function that behaves differently from everything else in host_transfer.
 
 const BALL_RADIUS: f32 = 0.0215;
 
@@ -41,8 +41,6 @@ pub fn robot_plugin(app: &mut App) {
 
     app.insert_resource(RobotMaskMesh(robot_mask_mesh, robot_mask_material));
     app.insert_resource(BallMesh(ball_mesh, ball_material));
-
-    app.add_systems(PostUpdate, apply_filtered_transform);
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -87,6 +85,8 @@ pub(crate) fn update_world_state(
             return;
         }
     };
+
+    let timestamp = world_state.timestamp.map(Duration::from_micros);
 
     // Remap from the vision coordinate system (right-handed, z up, x towards blue goal, +x forward)
     // to bevy's coordinate system (right-handed, y up, x towards blue goal, -z forward) with y and z swapped
@@ -144,28 +144,26 @@ pub(crate) fn update_world_state(
                 .iter()
                 .position(|(r, t, _, _, _)| **t == team && r.0 as u32 == robot_update.id);
             let new_robot_pos = Vec3::new(robot_update.p_x, 0.0, robot_update.p_y);
+            let new_robot_rot = Quat::from_rotation_y(robot_update.phi);
+            let new_robot_affine =
+                Affine3A::from_scale_rotation_translation(Vec3::ONE, new_robot_rot, new_robot_pos);
 
             if let Some(i) = leftover_index {
                 // Robot already exists -> update transform
                 let (_, _, mut t, _, _) = leftover_robots.swap_remove(i);
-                t.push_sample(
-                    Affine3A::from_scale_rotation_translation(
-                        Vec3::ONE,
-                        Quat::from_rotation_y(robot_update.phi),
-                        new_robot_pos,
-                    ),
-                    rx_time,
-                );
+                t.push_sample(new_robot_affine, timestamp, rx_time);
             } else {
                 // Add new robot
+                let mut filter = TransformFilter::new_linear(Duration::from_millis(500));
+                filter.push_sample(new_robot_affine, timestamp, rx_time);
                 let mut new_robot = commands.spawn((
                     ChildOf(field),
                     Robot(robot_update.id as u8),
                     team,
-                    TransformFilter::new_history(Duration::from_millis(500), true),
+                    filter,
                     Transform {
                         translation: new_robot_pos,
-                        rotation: Quat::from_rotation_y(robot_update.phi),
+                        rotation: new_robot_rot,
                         ..Transform::default()
                     },
                 ));

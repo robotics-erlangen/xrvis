@@ -92,6 +92,7 @@ impl Host {
             sender: tx_sender,
             receiver: rx_receiver,
             io_task: state_rx_task,
+            last_timestamp: None,
         }
     }
 }
@@ -117,6 +118,7 @@ pub struct HostConnection {
     pub sender: Sender<ws_request::Content>,
     receiver: Receiver<(UpdatePacket, Instant)>,
     io_task: Task<()>,
+    last_timestamp: Option<u64>,
 }
 
 // ======== Relationships ========
@@ -171,13 +173,13 @@ fn receive_host_packets(
     mut commands: Commands,
     mut q_hosts: Query<(
         &Host,
-        &HostConnection,
+        &mut HostConnection,
         Option<&mut FieldGeometry>,
         Option<&mut GameState>,
         Entity,
     )>,
 ) {
-    for (host, host_conn, mut geom, mut game_state, host_entity) in q_hosts.iter_mut() {
+    for (host, mut host_conn, mut geom, mut game_state, host_entity) in q_hosts.iter_mut() {
         if host_conn.io_task.is_finished() {
             info!(
                 "Connection to {} closed, despawning all related fields",
@@ -214,6 +216,13 @@ fn receive_host_packets(
                     );
                 }
                 UpdatePacket::WorldState(new_world_state) => {
+                    if let Some(ts) = new_world_state.timestamp {
+                        if host_conn.last_timestamp.is_some_and(|last| ts <= last) {
+                            warn!("Received out-of-order world state from host {host}, ignoring");
+                            continue;
+                        }
+                        host_conn.last_timestamp = Some(ts);
+                    }
                     // TODO: Currently the world state is the only thing that is directly written to the fields.
                     // All other data has a separate system for transferring host -> fields, so this feels inconsistent.
                     commands.run_system_cached_with(

@@ -16,6 +16,7 @@ mod transform_filter;
 
 pub fn ssl_game_plugin(app: &mut App) {
     app.add_plugins((fields::field_plugin, hosts::host_plugin));
+    app.add_systems(PostUpdate, transform_filter::apply_filtered_transform);
 
     app.insert_resource(RenderSettings {
         field: true,
