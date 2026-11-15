@@ -137,8 +137,11 @@ pub(crate) fn update_visualization_model(
         }
     }
 
-    // Spawn new sources
+    // Spawn new sources (with at least one visualization)
     for new_source in new_source_list {
+        if new_source.visualizations.is_empty() {
+            continue;
+        }
         commands
             .spawn((
                 VisualizationSource::new(new_source.name),
